@@ -209,5 +209,6 @@ describe('auto sensitivity', () => {
     const manual = generate([macro({ steps })], { ...defaultSettings, autoSensitivity: false }).script
     expect(manual).toContain('Turn(-300, 1, 0)')
     expect(manual).not.toContain('RefreshSens()\r\n')
+    expect(manual).toContain('global FallbackSens := 0.4')
   })
 })

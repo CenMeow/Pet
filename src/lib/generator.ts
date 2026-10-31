@@ -194,8 +194,8 @@ Turn(counts, parts, delayMs) {
 }
 
 ; 讀 Roblox 存檔裡的滑鼠靈敏度，讓轉視角角度不受遊戲設定影響
-RefreshSens() {
-    global CurSens
+RefreshSens(*) {
+    global CurSens, FallbackSens
     newest := "", newestTime := 0
     try {
         Loop Files EnvGet("LOCALAPPDATA") "\\Roblox\\GlobalBasicSettings_*.xml" {
@@ -218,6 +218,7 @@ RefreshSens() {
 }
 
 TurnDeg(degrees, parts, delayMs) {
+    global CountsPer360, CurSens
     Turn(Round(degrees / 360 * CountsPer360 / CurSens), parts, delayMs)
 }
 
@@ -371,15 +372,10 @@ export function generate(macros: Macro[], settings: Settings): GenerateResult {
       : []),
     '; 編輯器透過 stop.flag 要求停止，透過 heartbeat 判斷是否執行中（系統管理員模式下編輯器無法直接關閉腳本）',
     'SetTimer(WatchEditor, 300)',
-    ...(settings.autoSensitivity
-      ? [
-          `global CountsPer360 := ${settings.countsPer360}`,
-          `global FallbackSens := ${settings.sensitivity}`,
-          'global CurSens := FallbackSens',
-          'RefreshSens()',
-          'SetTimer(RefreshSens, 3000)',
-        ]
-      : []),
+    `global CountsPer360 := ${settings.countsPer360}`,
+    `global FallbackSens := ${settings.sensitivity}`,
+    'global CurSens := FallbackSens',
+    ...(settings.autoSensitivity ? ['RefreshSens()', 'SetTimer(RefreshSens, 3000)'] : []),
     ...(needsAdmin ? ['; 讀取實體按鍵狀態需要鍵盤、滑鼠 hook', 'InstallKeybdHook()', 'InstallMouseHook()'] : []),
     'ToolTip(A_IsAdmin ? "TSB 巨集已載入（系統管理員）" : "TSB 巨集已載入")',
     'SetTimer(() => ToolTip(), -1500)',
