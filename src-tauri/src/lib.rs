@@ -182,6 +182,10 @@ fn write_text_file(path: String, contents: String, bom: bool) -> Result<(), Stri
 #[tauri::command]
 fn read_text_file(path: String) -> Result<String, String> {
     let bytes = fs::read(&path).map_err(|e| format!("讀取 {path} 失敗：{e}"))?;
+    if let Some(rest) = bytes.strip_prefix(&[0xFF, 0xFE]) {
+        let units: Vec<u16> = rest.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+        return Ok(String::from_utf16_lossy(&units));
+    }
     let bytes = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(&bytes);
     Ok(String::from_utf8_lossy(bytes).into_owned())
 }

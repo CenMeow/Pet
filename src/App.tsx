@@ -5,6 +5,7 @@ import { generate } from './lib/generator'
 import { keyLabel } from './lib/keys'
 import { macroFromTemplate } from './lib/templates'
 import { parseMgp } from './lib/mgp'
+import { parseAhk } from './lib/ahkImport'
 import { loadLibrary, parseLibraryJson, saveLibrary, serializeLibrary } from './lib/storage'
 import { checkUpdate, installUpdate, isScriptRunning, isTauri, openTextFile, runScript, saveTextFile, stopScript } from './lib/native'
 import type { Update } from '@tauri-apps/plugin-updater'
@@ -113,14 +114,17 @@ export default function App() {
 
   const handleImport = async () => {
     try {
-      const file = await openTextFile(['mgp', 'json'], '巨集檔')
+      const file = await openTextFile(['ahk', 'mgp', 'json'], '巨集檔')
       if (!file) return
-      if (file.name.toLowerCase().endsWith('.mgp')) {
-        const { macros: imported, warnings } = parseMgp(file.text, file.name)
+      const lower = file.name.toLowerCase()
+      if (lower.endsWith('.mgp') || lower.endsWith('.ahk')) {
+        const { macros: imported, warnings } = lower.endsWith('.ahk')
+          ? parseAhk(file.text, settings, file.name)
+          : parseMgp(file.text, file.name)
         addMacros(imported)
         setToast({
           kind: warnings.length ? 'error' : 'info',
-          text: `匯入 ${imported.length} 個巨集${warnings.length ? `；${warnings.join('；')}` : ''}`,
+          text: `匯入 ${imported.length} 個巨集${warnings.length ? `；${warnings.slice(0, 5).join('；')}${warnings.length > 5 ? `…等 ${warnings.length} 項` : ''}` : ''}`,
         })
       } else {
         const parsed = parseLibraryJson(file.text)
@@ -193,7 +197,7 @@ export default function App() {
         <aside className="sidebar">
           <div className="sidebar-actions">
             <button type="button" className="primary" onClick={() => setShowTemplates(true)}>+ 新增巨集</button>
-            <button type="button" onClick={handleImport} title="支援 .mgp 和本編輯器匯出的 .json">匯入</button>
+            <button type="button" onClick={handleImport} title="支援 .ahk、.mgp、.json">匯入</button>
             <button type="button" onClick={handleExportJson} title="把所有巨集存成 .json，可以分享">匯出</button>
           </div>
           <ul className="macro-list">
