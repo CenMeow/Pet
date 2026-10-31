@@ -28,4 +28,4 @@ src-tauri/target
 src-tauri/gen/schemas
 
 # 本機下載的安裝檔
-installer/
+installer*/
