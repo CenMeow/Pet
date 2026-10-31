@@ -58,6 +58,7 @@ function parseSettings(raw: unknown): Settings {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
   return {
     sensitivity: num(r.sensitivity, defaultSettings.sensitivity),
+    autoSensitivity: r.autoSensitivity !== false,
     countsPer360: num(r.countsPer360, defaultSettings.countsPer360),
     toggleHotkey: str(r.toggleHotkey, defaultSettings.toggleHotkey),
     exitHotkey: str(r.exitHotkey, defaultSettings.exitHotkey),

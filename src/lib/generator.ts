@@ -147,7 +147,9 @@ function stepLines(s: Step, settings: Settings): string[] {
     case 'wait':
       return s.ms > 0 ? [`PreciseSleep(${Math.round(s.ms)})`] : []
     case 'turn':
-      return [`Turn(${turnCounts(s.degrees, settings)}, ${s.parts}, ${Math.round(s.partDelayMs)})  ; ${s.degrees}°`]
+      return settings.autoSensitivity
+        ? [`TurnDeg(${s.degrees}, ${s.parts}, ${Math.round(s.partDelayMs)})`]
+        : [`Turn(${turnCounts(s.degrees, settings)}, ${s.parts}, ${Math.round(s.partDelayMs)})  ; ${s.degrees}°`]
     case 'moveTo':
       return [`MouseMove(${s.x}, ${s.y}, 0)`]
     case 'block': {
@@ -189,6 +191,31 @@ Turn(counts, parts, delayMs) {
         if (A_Index < parts && delayMs > 0)
             PreciseSleep(delayMs)
     }
+}
+
+; 讀 Roblox 存檔裡的滑鼠靈敏度，讓轉視角角度不受遊戲設定影響
+RefreshSens() {
+    global CurSens
+    newest := "", newestTime := ""
+    Loop Files EnvGet("LOCALAPPDATA") "\\Roblox\\GlobalBasicSettings_*.xml" {
+        if (A_LoopFileTimeModified > newestTime) {
+            newestTime := A_LoopFileTimeModified
+            newest := A_LoopFileFullPath
+        }
+    }
+    val := 0
+    if (newest != "") {
+        try {
+            text := FileRead(newest)
+            if RegExMatch(text, '<float name="MouseSensitivity">([\\d.]+)</float>', &m)
+                val := Float(m[1])
+        }
+    }
+    CurSens := val > 0 ? val : FallbackSens
+}
+
+TurnDeg(degrees, parts, delayMs) {
+    Turn(Round(degrees / 360 * CountsPer360 / CurSens), parts, delayMs)
 }
 
 WatchEditor() {
@@ -341,6 +368,15 @@ export function generate(macros: Macro[], settings: Settings): GenerateResult {
       : []),
     '; 編輯器透過 stop.flag 要求停止，透過 heartbeat 判斷是否執行中（系統管理員模式下編輯器無法直接關閉腳本）',
     'SetTimer(WatchEditor, 300)',
+    ...(settings.autoSensitivity
+      ? [
+          `global CountsPer360 := ${settings.countsPer360}`,
+          `global FallbackSens := ${settings.sensitivity}`,
+          'global CurSens := FallbackSens',
+          'RefreshSens()',
+          'SetTimer(RefreshSens, 3000)',
+        ]
+      : []),
     ...(needsAdmin ? ['; 讀取實體按鍵狀態需要鍵盤、滑鼠 hook', 'InstallKeybdHook()', 'InstallMouseHook()'] : []),
     'ToolTip(A_IsAdmin ? "TSB 巨集已載入（系統管理員）" : "TSB 巨集已載入")',
     'SetTimer(() => ToolTip(), -1500)',

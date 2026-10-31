@@ -14,8 +14,12 @@ export function SettingsPanel({ settings, onChange }: Props) {
 
       <section>
         <h3>轉視角</h3>
+        <label className="check">
+          <input type="checkbox" checked={settings.autoSensitivity} onChange={(e) => set('autoSensitivity', e.target.checked)} />
+          自動讀取 Roblox 靈敏度
+        </label>
         <label>
-          Roblox 滑鼠靈敏度
+          靈敏度（讀不到時用）
           <input type="number" step={0.01} min={0.01} value={settings.sensitivity}
             onChange={(e) => set('sensitivity', Number(e.target.value))} />
         </label>

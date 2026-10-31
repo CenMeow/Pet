@@ -89,8 +89,7 @@ describe('generator', () => {
     // 參考腳本：720 / 靈敏度 = 360°
     expect(turnCounts(360, { ...defaultSettings, sensitivity: 0.4 })).toBe(1800)
     expect(turnCounts(-60, { ...defaultSettings, sensitivity: 0.4 })).toBe(-300)
-    const { script } = generate([macro({ steps: [{ id: 't', type: 'turn', degrees: 86, parts: 1, partDelayMs: 0 }] })], defaultSettings)
-    expect(script).toContain('Turn(430, 1, 0)')
+    expect(generate([macro({ steps: [{ id: "t", type: "turn", degrees: 86, parts: 1, partDelayMs: 0 }] })], { ...defaultSettings, autoSensitivity: false }).script).toContain("Turn(430, 1, 0)")
   })
 
   it('flags duplicate hotkeys and bad keys', () => {
@@ -185,7 +184,7 @@ describe('block input', () => {
   })
   it('leaves macros without block steps unwrapped', () => {
     const { script } = generate([macro({ steps: [{ id: 't', type: 'tap', key: 'q' }] })], defaultSettings)
-    expect(script).not.toContain('    try {')
+    expect(script).not.toContain('Macro1(*) {\r\n    try {')
     expect(script).not.toContain('*RunAs')
   })
 })
@@ -196,5 +195,19 @@ describe('held keys', () => {
     expect(script).toContain('ReleaseHeld(BlockableKeys())\n            ReleaseHeld(MouseButtons)\n            BlockInput("On")')
     expect(script).toContain('RestoreHeld(keys) {')
     expect(script).toContain('InstallKeybdHook()')
+  })
+})
+
+describe('auto sensitivity', () => {
+  it('reads Roblox sensitivity at runtime when enabled', () => {
+    const steps = [{ id: 't', type: 'turn' as const, degrees: -60, parts: 1, partDelayMs: 0 }]
+    const auto = generate([macro({ steps })], { ...defaultSettings, autoSensitivity: true }).script
+    expect(auto).toContain('TurnDeg(-60, 1, 0)')
+    expect(auto).toContain('"\\Roblox\\GlobalBasicSettings_*.xml"')
+    expect(auto).toContain(`'<float name="MouseSensitivity">([\\d.]+)</float>'`)
+    expect(auto).toContain('global FallbackSens := 0.4')
+    const manual = generate([macro({ steps })], { ...defaultSettings, autoSensitivity: false }).script
+    expect(manual).toContain('Turn(-300, 1, 0)')
+    expect(manual).not.toContain('RefreshSens()\r\n')
   })
 })

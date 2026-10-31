@@ -32,6 +32,8 @@ export interface Macro {
 export interface Settings {
   /** Roblox 設定裡的滑鼠靈敏度 */
   sensitivity: number
+  /** 執行時自動讀 Roblox 存檔裡的靈敏度（讀不到才用 sensitivity） */
+  autoSensitivity: boolean
   /** 靈敏度 1 時轉 360° 需要的滑鼠移動量（可校正） */
   countsPer360: number
   toggleHotkey: string
@@ -49,6 +51,7 @@ export interface Library {
 
 export const defaultSettings: Settings = {
   sensitivity: 0.4,
+  autoSensitivity: true,
   countsPer360: 720,
   toggleHotkey: 'F2',
   exitHotkey: 'F1',
