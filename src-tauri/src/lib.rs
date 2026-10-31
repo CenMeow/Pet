@@ -190,6 +190,27 @@ fn read_text_file(path: String) -> Result<String, String> {
     Ok(String::from_utf8_lossy(bytes).into_owned())
 }
 
+/// 回傳找到的 AutoHotkey v2 路徑
+#[tauri::command]
+fn detect_ahk(ahk_path: String) -> Result<String, String> {
+    find_ahk(&ahk_path).map(|p| p.display().to_string())
+}
+
+/// 用預設瀏覽器開網址（只接受 https）
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    if !url.starts_with("https://") || url.chars().any(|c| c.is_whitespace() || c == '"') {
+        return Err("網址不正確".into());
+    }
+    #[cfg(target_os = "windows")]
+    let result = Command::new("rundll32").arg("url.dll,FileProtocolHandler").arg(&url).spawn();
+    #[cfg(target_os = "macos")]
+    let result = Command::new("open").arg(&url).spawn();
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    let result = Command::new("xdg-open").arg(&url).spawn();
+    result.map(|_| ()).map_err(|e| format!("開啟網址失敗：{e}"))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
@@ -202,7 +223,9 @@ pub fn run() {
             stop_script,
             script_running,
             write_text_file,
-            read_text_file
+            read_text_file,
+            detect_ahk,
+            open_url
         ])
         .build(tauri::generate_context!())
         .expect("啟動應用程式失敗");

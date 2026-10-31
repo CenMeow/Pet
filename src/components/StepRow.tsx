@@ -1,6 +1,7 @@
 import type { HTMLAttributes, ReactNode } from 'react'
 import type { BlockTarget, Settings, Step } from '../lib/types'
 import { KeyCapture } from './KeyCapture'
+import { Icon } from './ui'
 
 export const STEP_LABELS: Record<Step['type'], string> = {
   tap: '按一下',
@@ -37,7 +38,7 @@ function NumberField({ value, onChange, step = 1, min, width = 70 }: {
       value={Number.isFinite(value) ? value : ''}
       step={step}
       min={min}
-      style={{ width }}
+      style={{ width: `${width / 14}rem` }}
       onChange={(e) => onChange(e.target.value === '' ? NaN : Number(e.target.value))}
     />
   )
@@ -65,7 +66,7 @@ export function StepRow({ step, index, total, hasError, onChange, onMove, onDupl
         <>
           <NumberField value={step.ms} min={0} onChange={(ms) => onChange({ ...step, ms })} />
           <span className="unit">毫秒</span>
-          <span className="hint">{(step.ms / FRAME_MS).toFixed(1)} 格</span>
+          {Number.isFinite(step.ms) && <span className="hint">{(step.ms / FRAME_MS).toFixed(1)} 格</span>}
         </>
       )
       break
@@ -118,15 +119,15 @@ export function StepRow({ step, index, total, hasError, onChange, onMove, onDupl
 
   return (
     <div className={`step-row type-${step.type} ${hasError ? 'has-error' : ''} ${dragging ? 'dragging' : ''}`}>
-      <span className="drag-handle" title="按住拖曳排序" {...handleProps}>⋮⋮</span>
+      <span className="drag-handle" title="按住拖曳排序" {...handleProps}><Icon name="grip" size={15} /></span>
       <span className="step-index">{index + 1}</span>
       <span className={`step-badge badge-${step.type}`}>{STEP_LABELS[step.type]}</span>
       <div className="step-body">{body}</div>
       <div className="step-actions">
-        <button type="button" disabled={index === 0} onClick={() => onMove(-1)} title="上移">↑</button>
-        <button type="button" disabled={index === total - 1} onClick={() => onMove(1)} title="下移">↓</button>
-        <button type="button" onClick={onDuplicate} title="複製這一步">⧉</button>
-        <button type="button" className="danger" onClick={onDelete} title="刪除">✕</button>
+        <button type="button" className="ghost icon-only" disabled={index === 0} onClick={() => onMove(-1)} title="上移"><Icon name="up" /></button>
+        <button type="button" className="ghost icon-only" disabled={index === total - 1} onClick={() => onMove(1)} title="下移"><Icon name="down" /></button>
+        <button type="button" className="ghost icon-only" onClick={onDuplicate} title="複製這一步"><Icon name="copy" size={14} /></button>
+        <button type="button" className="ghost icon-only danger" onClick={onDelete} title="刪除"><Icon name="trash" size={14} /></button>
       </div>
     </div>
   )

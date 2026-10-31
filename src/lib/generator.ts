@@ -87,7 +87,7 @@ export function validate(macros: Macro[], settings: Settings): Problem[] {
     } else {
       claim(hk, name, m.id)
       if (!m.passThrough && /^[\^!+#]*(LButton|RButton)$/.test(hk)) {
-        problems.push({ level: 'warning', macroId: m.id, message: `「${name}」用滑鼠左／右鍵當觸發鍵，遊戲裡會收不到這個鍵；建議換鍵或勾選「觸發鍵照常輸入」` })
+        problems.push({ level: 'warning', macroId: m.id, message: `「${name}」用滑鼠左／右鍵當觸發鍵，遊戲裡會收不到這個鍵；建議換鍵或打開「按鍵穿透」` })
       }
     }
     if (m.steps.length === 0) {

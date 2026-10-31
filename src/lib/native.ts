@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { open, save } from '@tauri-apps/plugin-dialog'
 import { check, type Update } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 
 export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
@@ -81,4 +82,32 @@ export async function installUpdate(update: Update): Promise<void> {
   await stopScript().catch(() => false)
   await update.downloadAndInstall()
   await relaunch()
+}
+
+/** 用預設瀏覽器開網址 */
+export async function openUrl(url: string): Promise<void> {
+  if (!isTauri) {
+    window.open(url, '_blank', 'noopener')
+    return
+  }
+  await invoke('open_url', { url })
+}
+
+/** 找 AutoHotkey v2，回傳找到的路徑；找不到會丟出錯誤訊息 */
+export async function detectAhk(ahkPath: string): Promise<string> {
+  if (!isTauri) throw new Error('預覽模式無法偵測')
+  return invoke<string>('detect_ahk', { ahkPath })
+}
+
+/** 選一個 .exe，回傳路徑 */
+export async function pickExe(): Promise<string | null> {
+  if (!isTauri) return null
+  const path = await open({ multiple: false, directory: false, filters: [{ name: 'AutoHotkey', extensions: ['exe'] }] })
+  return !path || Array.isArray(path) ? null : path
+}
+
+/** 讓視窗標題列跟著深色／淺色主題（null = 跟隨系統） */
+export function setWindowTheme(theme: 'dark' | 'light' | null) {
+  if (!isTauri) return
+  getCurrentWindow().setTheme(theme).catch(() => {})
 }

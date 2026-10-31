@@ -7,11 +7,13 @@ import { macroFromTemplate } from './lib/templates'
 import { parseMgp } from './lib/mgp'
 import { parseAhk } from './lib/ahkImport'
 import { loadLibrary, parseLibraryJson, saveLibrary, serializeLibrary } from './lib/storage'
-import { checkUpdate, installUpdate, isScriptRunning, isTauri, openTextFile, runScript, saveTextFile, stopScript } from './lib/native'
+import { checkUpdate, installUpdate, isScriptRunning, isTauri, openTextFile, runScript, saveTextFile, setWindowTheme, stopScript } from './lib/native'
+import { applyAppearance, loadAppearance, saveAppearance, type Appearance } from './lib/appearance'
 import type { Update } from '@tauri-apps/plugin-updater'
 import { MacroEditor } from './components/MacroEditor'
 import { SettingsPanel } from './components/SettingsPanel'
 import { TemplatePicker } from './components/TemplatePicker'
+import { Icon, Switch } from './components/ui'
 import './App.css'
 
 type Toast = { kind: 'info' | 'error'; text: string } | null
@@ -28,6 +30,18 @@ export default function App() {
   const [toast, setToast] = useState<Toast>(null)
   const [update, setUpdate] = useState<Update | null>(null)
   const [updating, setUpdating] = useState(false)
+  const [appearance, setAppearance] = useState<Appearance>(loadAppearance)
+
+  useEffect(() => {
+    saveAppearance(appearance)
+    applyAppearance(appearance)
+    setWindowTheme(appearance.theme === 'system' ? null : appearance.theme)
+    if (appearance.theme !== 'system') return
+    const mq = window.matchMedia('(prefers-color-scheme: light)')
+    const onChange = () => applyAppearance(appearance)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [appearance])
 
   useEffect(() => {
     checkUpdate().then(setUpdate)
@@ -174,32 +188,55 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <h1>TSB 巨屌編輯器</h1>
-        <div className="run-status">
-          <span className={`dot ${running ? 'on' : ''}`} />
-          {running ? `執行中（${keyLabel(settings.toggleHotkey)} 開關、${keyLabel(settings.exitHotkey)} 結束）` : '未執行'}
+        <div className="brand">
+          <span className="brand-mark"><Icon name="zap" size={15} /></span>
+          <h1>TSB 巨屌編輯器</h1>
+        </div>
+        <div className={`run-status ${running ? 'on' : ''}`}>
+          <span className="dot" />
+          {running ? (
+            <>執行中<span className="run-keys"><kbd>{keyLabel(settings.toggleHotkey)}</kbd> 開關 <kbd>{keyLabel(settings.exitHotkey)}</kbd> 結束</span></>
+          ) : '未執行'}
         </div>
         <span className="spacer" />
         {update && (
           <button type="button" className="update" onClick={handleUpdate} disabled={updating}>
-            {updating ? '更新中…' : `更新到 ${update.version}`}
+            <Icon name="sparkle" />{updating ? '更新中…' : `更新到 ${update.version}`}
           </button>
         )}
-        <button type="button" className="primary" onClick={handleRun} disabled={errors.length > 0}>
-          {running ? '套用變更' : '▶ 執行'}
+        <button type="button" className={`ghost ${showScript ? 'pressed' : ''}`} onClick={() => setShowScript((v) => !v)} title="查看產生的腳本">
+          <Icon name="code" /><span className="btn-text">腳本</span>
         </button>
-        <button type="button" onClick={handleStop} disabled={!running}>■ 停止</button>
-        <button type="button" onClick={handleExportAhk}>匯出 .ahk</button>
-        <button type="button" onClick={() => setShowScript((v) => !v)}>{showScript ? '隱藏腳本' : '查看腳本'}</button>
+        <button type="button" className="ghost" onClick={handleExportAhk} title="存成 .ahk 檔">
+          <Icon name="file" /><span className="btn-text">匯出 .ahk</span>
+        </button>
+        <span className="divider" />
+        {running && (
+          <button type="button" className="stop" onClick={handleStop}>
+            <Icon name="stop" size={14} />停止
+          </button>
+        )}
+        <button type="button" className="primary run" onClick={handleRun} disabled={errors.length > 0}>
+          {running ? <><Icon name="refresh" />套用變更</> : <><Icon name="play" size={14} />執行</>}
+        </button>
       </header>
 
       <div className="main">
         <aside className="sidebar">
-          <div className="sidebar-actions">
-            <button type="button" className="primary" onClick={() => setShowTemplates(true)}>+ 新增巨集</button>
-            <button type="button" onClick={handleImport} title="支援 .ahk、.mgp、.json">匯入</button>
-            <button type="button" onClick={handleExportJson} title="把所有巨集存成 .json，可以分享">匯出</button>
+          <div className="sidebar-top">
+            <button type="button" className="primary block" onClick={() => setShowTemplates(true)}>
+              <Icon name="plus" />新增巨集
+            </button>
+            <div className="sidebar-io">
+              <button type="button" className="ghost" onClick={handleImport} title="支援 .ahk、.mgp、.json">
+                <Icon name="import" />匯入
+              </button>
+              <button type="button" className="ghost" onClick={handleExportJson} title="所有巨集存成 .json">
+                <Icon name="export" />匯出
+              </button>
+            </div>
           </div>
+          <div className="sidebar-label">巨集<span className="count">{macros.length}</span></div>
           <ul className="macro-list">
             {macros.map((m) => {
               const hasError = errors.some((p) => p.macroId === m.id)
@@ -209,27 +246,22 @@ export default function App() {
                   className={`${m.id === selectedId && view === 'macro' ? 'active' : ''} ${m.enabled ? '' : 'disabled'}`}
                   onClick={() => { setSelectedId(m.id); setView('macro') }}
                 >
-                  <input
-                    type="checkbox"
-                    checked={m.enabled}
-                    title="啟用／停用"
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={(e) => updateMacro({ ...m, enabled: e.target.checked })}
-                  />
+                  <Switch small checked={m.enabled} title="啟用／停用" onChange={(enabled) => updateMacro({ ...m, enabled })} />
                   <span className="macro-list-name">{hasError && <span className="err-dot" title="有問題">!</span>}{m.name || '(未命名)'}</span>
                   <kbd>{m.hotkey ? keyLabel(m.hotkey) : '—'}</kbd>
                 </li>
               )
             })}
+            {macros.length === 0 && <li className="list-empty">還沒有巨集</li>}
           </ul>
-          <button type="button" className={`settings-link ${view === 'settings' ? 'active' : ''}`} onClick={() => setView('settings')}>
-            ⚙ 設定（靈敏度、快捷鍵）
+          <button type="button" className={`nav-item ${view === 'settings' ? 'active' : ''}`} onClick={() => setView('settings')}>
+            <Icon name="settings" />設定
           </button>
         </aside>
 
         <main className="content">
           {view === 'settings' ? (
-            <SettingsPanel settings={settings} onChange={setSettings} />
+            <SettingsPanel settings={settings} onChange={setSettings} appearance={appearance} onAppearanceChange={setAppearance} />
           ) : selected ? (
             <MacroEditor
               key={selected.id}
@@ -241,13 +273,20 @@ export default function App() {
               onDelete={() => deleteMacro(selected.id)}
             />
           ) : (
-            <div className="empty big">還沒有巨集</div>
+            <div className="empty-state">
+              <Icon name="zap" size={28} />
+              <p>還沒有巨集</p>
+              <button type="button" className="primary" onClick={() => setShowTemplates(true)}><Icon name="plus" />新增巨集</button>
+            </div>
           )}
 
           {problems.length > 0 && (
-            <div className="problems">
+            <div className="page problems">
               {problems.map((p, i) => (
-                <div key={i} className={`problem ${p.level}`}>{p.level === 'error' ? '錯誤' : '提醒'}：{p.message}</div>
+                <div key={i} className={`problem ${p.level}`}>
+                  <Icon name={p.level === 'error' ? 'alert' : 'warn'} size={15} />
+                  <span>{p.message}</span>
+                </div>
               ))}
             </div>
           )}
@@ -256,9 +295,12 @@ export default function App() {
         {showScript && (
           <aside className="script-panel">
             <div className="script-head">
-              <h3>產生的 AHK v2 腳本</h3>
-              <button type="button" onClick={() => navigator.clipboard.writeText(script).then(() => setToast({ kind: 'info', text: '已複製' }))} disabled={!script}>
-                複製
+              <h3><Icon name="code" />AHK v2 腳本</h3>
+              <button type="button" className="ghost" onClick={() => navigator.clipboard.writeText(script).then(() => setToast({ kind: 'info', text: '已複製' }))} disabled={!script}>
+                <Icon name="copy" />複製
+              </button>
+              <button type="button" className="ghost icon-only" onClick={() => setShowScript(false)} title="關閉">
+                <Icon name="x" />
               </button>
             </div>
             <pre>{script || '修正錯誤後才會產生腳本'}</pre>
@@ -267,7 +309,12 @@ export default function App() {
       </div>
 
       {!isTauri && <div className="browser-note">預覽模式，不能執行</div>}
-      {toast && <div className={`toast ${toast.kind}`} onClick={() => setToast(null)}>{toast.text}</div>}
+      {toast && (
+        <div className={`toast ${toast.kind}`} onClick={() => setToast(null)}>
+          <Icon name={toast.kind === 'error' ? 'alert' : 'checkCircle'} size={17} />
+          <span>{toast.text}</span>
+        </div>
+      )}
       {showTemplates && (
         <TemplatePicker
           onClose={() => setShowTemplates(false)}
