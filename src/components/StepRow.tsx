@@ -25,7 +25,8 @@ interface Props {
   onMove: (delta: number) => void
   onDuplicate: () => void
   onDelete: () => void
-  dragProps: HTMLAttributes<HTMLDivElement>
+  handleProps: HTMLAttributes<HTMLSpanElement>
+  dragging: boolean
 }
 
 function NumberField({ value, onChange, step = 1, min, width = 70 }: {
@@ -43,7 +44,7 @@ function NumberField({ value, onChange, step = 1, min, width = 70 }: {
   )
 }
 
-export function StepRow({ step, index, total, settings, hasError, onChange, onMove, onDuplicate, onDelete, dragProps }: Props) {
+export function StepRow({ step, index, total, settings, hasError, onChange, onMove, onDuplicate, onDelete, handleProps, dragging }: Props) {
   let body: ReactNode
   switch (step.type) {
     case 'tap':
@@ -114,8 +115,8 @@ export function StepRow({ step, index, total, settings, hasError, onChange, onMo
   }
 
   return (
-    <div className={`step-row type-${step.type} ${hasError ? 'has-error' : ''}`} {...dragProps}>
-      <span className="drag-handle" title="拖曳排序">⋮⋮</span>
+    <div className={`step-row type-${step.type} ${hasError ? 'has-error' : ''} ${dragging ? 'dragging' : ''}`}>
+      <span className="drag-handle" title="按住拖曳排序" {...handleProps}>⋮⋮</span>
       <span className="step-index">{index + 1}</span>
       <span className={`step-badge badge-${step.type}`}>{STEP_LABELS[step.type]}</span>
       <div className="step-body">{body}</div>

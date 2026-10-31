@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { Macro, Settings, Step, StepType } from '../lib/types'
 import { newId } from '../lib/types'
 import { estimateDuration, type Problem } from '../lib/generator'
@@ -35,8 +35,23 @@ function blankStep(type: StepType): Step {
 const ADDABLE: StepType[] = ['tap', 'down', 'up', 'wait', 'turn', 'moveTo', 'block']
 
 export function MacroEditor({ macro, settings, problems, onChange, onDuplicate, onDelete }: Props) {
-  const [dragIndex, setDragIndex] = useState<number | null>(null)
-  const [overIndex, setOverIndex] = useState<number | null>(null)
+  // 用 pointer 事件自己做拖曳，不靠 HTML5 drag & drop（桌面版的 WebView2 會攔截它）
+  const listRef = useRef<HTMLDivElement>(null)
+  const [drag, setDrag] = useState<{ from: number; at: number } | null>(null)
+  const dragRef = useRef<{ from: number; at: number } | null>(null)
+  const updateDrag = (d: { from: number; at: number } | null) => {
+    dragRef.current = d
+    setDrag(d)
+  }
+  /** 指標所在位置對應的插入點（0 = 第一步之前，n = 最後一步之後） */
+  const insertionAt = (y: number) => {
+    const slots = listRef.current?.querySelectorAll<HTMLElement>('.drop-slot') ?? []
+    for (let i = 0; i < slots.length; i++) {
+      const r = slots[i].getBoundingClientRect()
+      if (y < r.top + r.height / 2) return i
+    }
+    return slots.length
+  }
 
   const setSteps = (steps: Step[]) => onChange({ ...macro, steps })
   const updateStep = (i: number, s: Step) => setSteps(macro.steps.map((x, j) => (j === i ? s : x)))
@@ -95,16 +110,20 @@ export function MacroEditor({ macro, settings, problems, onChange, onDuplicate, 
         <span className="hint">共 {macro.steps.length} 步，約 {Math.round(estimateDuration(macro.steps))} 毫秒</span>
       </div>
 
-      <div className="steps-list">
+      <div className="steps-list" ref={listRef}>
         {macro.steps.length === 0 && <div className="empty">還沒有步驟。用上面的按鈕新增，步驟會由上往下依序執行。</div>}
         {macro.steps.map((s, i) => (
-          <div key={s.id} className={`drop-slot ${overIndex === i && dragIndex !== null && dragIndex !== i ? 'drop-target' : ''}`}>
+          <div
+            key={s.id}
+            className={`drop-slot ${drag && drag.at === i && drag.at !== drag.from && drag.at !== drag.from + 1 ? 'drop-target' : ''} ${drag && i === macro.steps.length - 1 && drag.at === macro.steps.length && drag.from !== i ? 'drop-target-after' : ''}`}
+          >
             <StepRow
               step={s}
               index={i}
               total={macro.steps.length}
               settings={settings}
               hasError={errorSteps.has(s.id)}
+              dragging={drag?.from === i}
               onChange={(ns) => updateStep(i, ns)}
               onMove={(d) => moveStep(i, i + d)}
               onDuplicate={() => {
@@ -113,26 +132,26 @@ export function MacroEditor({ macro, settings, problems, onChange, onDuplicate, 
                 setSteps(steps)
               }}
               onDelete={() => setSteps(macro.steps.filter((_, j) => j !== i))}
-              dragProps={{
-                draggable: true,
-                onDragStart: (e) => {
-                  setDragIndex(i)
-                  e.dataTransfer.effectAllowed = 'move'
-                },
-                onDragOver: (e) => {
+              handleProps={{
+                onPointerDown: (e) => {
+                  if (e.button !== 0) return
                   e.preventDefault()
-                  setOverIndex(i)
+                  e.currentTarget.setPointerCapture(e.pointerId)
+                  updateDrag({ from: i, at: i })
                 },
-                onDrop: (e) => {
-                  e.preventDefault()
-                  if (dragIndex !== null) moveStep(dragIndex, i)
-                  setDragIndex(null)
-                  setOverIndex(null)
+                onPointerMove: (e) => {
+                  const d = dragRef.current
+                  if (!d) return
+                  const at = insertionAt(e.clientY)
+                  if (at !== d.at) updateDrag({ ...d, at })
                 },
-                onDragEnd: () => {
-                  setDragIndex(null)
-                  setOverIndex(null)
+                onPointerUp: () => {
+                  const d = dragRef.current
+                  updateDrag(null)
+                  if (!d) return
+                  moveStep(d.from, d.at > d.from ? d.at - 1 : d.at)
                 },
+                onPointerCancel: () => updateDrag(null),
               }}
             />
           </div>

@@ -122,3 +122,7 @@ kbd { background: var(--panel2); border: 1px solid var(--border); border-radius:
 .toast.error { background: #4a1f24; border: 1px solid var(--danger); }
 .browser-note { background: #2b3550; color: #c9d6ff; text-align: center; font-size: 12px; padding: 4px; }
 .badge-block { background: #6e2a3a; }
+.drag-handle { touch-action: none; padding: 4px 2px; }
+.drop-slot.drop-target-after { border-bottom: 2px solid var(--accent); }
+.step-row.dragging { opacity: .5; }
+body:has(.step-row.dragging) { cursor: grabbing; user-select: none; }
