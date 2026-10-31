@@ -27,10 +27,12 @@ function blankStep(type: StepType): Step {
       return { id, type, degrees: 90, parts: 1, partDelayMs: 0 }
     case 'moveTo':
       return { id, type, x: 960, y: 540 }
+    case 'block':
+      return { id, type, target: 'all', on: true }
   }
 }
 
-const ADDABLE: StepType[] = ['tap', 'down', 'up', 'wait', 'turn', 'moveTo']
+const ADDABLE: StepType[] = ['tap', 'down', 'up', 'wait', 'turn', 'moveTo', 'block']
 
 export function MacroEditor({ macro, settings, problems, onChange, onDuplicate, onDelete }: Props) {
   const [dragIndex, setDragIndex] = useState<number | null>(null)

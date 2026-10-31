@@ -10,6 +10,10 @@ export type Step =
   | { id: string; type: 'turn'; degrees: number; parts: number; partDelayMs: number }
   /** 移動滑鼠到螢幕絕對座標（例如點表情輪盤），會因解析度不同而失準。 */
   | { id: string; type: 'moveTo'; x: number; y: number }
+  /** 封鎖／解除封鎖你自己的鍵盤或滑鼠輸入，巨集本身送出的按鍵不受影響。巨集結束時一定會自動解除。 */
+  | { id: string; type: 'block'; target: BlockTarget; on: boolean }
+
+export type BlockTarget = 'keyboard' | 'mouse' | 'all'
 
 export type StepType = Step['type']
 

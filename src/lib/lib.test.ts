@@ -163,3 +163,21 @@ describe('hold duration', () => {
     expect(body.indexOf('MouseMove(957, 700, 0)')).toBeLessThan(body.indexOf('Send("{b}")'))
   })
 })
+
+describe('block input', () => {
+  it('wraps macros with block steps in try/finally', () => {
+    const { script, problems } = generate([macro({ steps: [
+      { id: 'b1', type: 'block', target: 'all', on: true },
+      { id: 't', type: 'tap', key: 'q' },
+      { id: 'b2', type: 'block', target: 'keyboard', on: false },
+    ] })], defaultSettings)
+    expect(problems).toEqual([])
+    expect(script).toContain('    try {\r\n        BlockKeyboard(true)\r\n        BlockMouse(true)\r\n        Send("{q}")\r\n        BlockKeyboard(false)\r\n    } finally {\r\n        UnblockAll()\r\n    }')
+    const parsed = parseLibraryJson(serializeLibrary(defaultSettings, [macro({ steps: [{ id: 'b', type: 'block', target: 'mouse', on: false }] })]))
+    expect(parsed.macros[0].steps[0]).toMatchObject({ type: 'block', target: 'mouse', on: false })
+  })
+  it('leaves macros without block steps unwrapped', () => {
+    const { script } = generate([macro({ steps: [{ id: 't', type: 'tap', key: 'q' }] })], defaultSettings)
+    expect(script).not.toContain('    try {')
+  })
+})

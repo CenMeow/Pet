@@ -121,3 +121,4 @@ kbd { background: var(--panel2); border: 1px solid var(--border); border-radius:
 .toast.info { background: #1f3b2b; border: 1px solid var(--ok); }
 .toast.error { background: #4a1f24; border: 1px solid var(--danger); }
 .browser-note { background: #2b3550; color: #c9d6ff; text-align: center; font-size: 12px; padding: 4px; }
+.badge-block { background: #6e2a3a; }

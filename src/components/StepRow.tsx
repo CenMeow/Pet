@@ -1,5 +1,5 @@
 import type { HTMLAttributes, ReactNode } from 'react'
-import type { Settings, Step } from '../lib/types'
+import type { BlockTarget, Settings, Step } from '../lib/types'
 import { turnCounts } from '../lib/generator'
 import { KeyCapture } from './KeyCapture'
 
@@ -10,6 +10,7 @@ export const STEP_LABELS: Record<Step['type'], string> = {
   wait: '等待',
   turn: '轉視角',
   moveTo: '滑鼠移到',
+  block: '封鎖輸入',
 }
 
 const FRAME_MS = 1000 / 60
@@ -80,6 +81,22 @@ export function StepRow({ step, index, total, settings, hasError, onChange, onMo
           <NumberField value={step.partDelayMs} min={0} width={55} onChange={(partDelayMs) => onChange({ ...step, partDelayMs })} />
           <span className="unit">毫秒</span>
           <span className="hint">= 移動 {Number.isFinite(step.degrees) && settings.sensitivity > 0 ? turnCounts(step.degrees, settings) : '?'}</span>
+        </>
+      )
+      break
+    case 'block':
+      body = (
+        <>
+          <select value={step.on ? 'on' : 'off'} onChange={(e) => onChange({ ...step, on: e.target.value === 'on' })}>
+            <option value="on">開始封鎖</option>
+            <option value="off">解除封鎖</option>
+          </select>
+          <select value={step.target} onChange={(e) => onChange({ ...step, target: e.target.value as BlockTarget })}>
+            <option value="all">全部（鍵盤＋滑鼠）</option>
+            <option value="keyboard">鍵盤</option>
+            <option value="mouse">滑鼠</option>
+          </select>
+          <span className="hint">只擋你自己的輸入，巨集送出的照常；巨集結束會自動解除</span>
         </>
       )
       break

@@ -112,6 +112,9 @@ export function validate(macros: Macro[], settings: Settings): Problem[] {
           if (!Number.isInteger(s.parts) || s.parts < 1 || s.parts > 200) problems.push({ level: 'error', ...at, message: `「${name}」的轉向分段數要是 1–200 的整數` })
           if (!isFiniteNumber(s.partDelayMs) || s.partDelayMs < 0) problems.push({ level: 'error', ...at, message: `「${name}」的分段間隔必須是 0 以上的數字` })
           break
+        case 'block':
+          if (!['keyboard', 'mouse', 'all'].includes(s.target)) problems.push({ level: 'error', ...at, message: `「${name}」的封鎖對象不正確` })
+          break
         case 'moveTo':
           if (!Number.isInteger(s.x) || !Number.isInteger(s.y)) problems.push({ level: 'error', ...at, message: `「${name}」的滑鼠座標要是整數` })
           break
@@ -147,6 +150,13 @@ function stepLines(s: Step, settings: Settings): string[] {
       return [`Turn(${turnCounts(s.degrees, settings)}, ${s.parts}, ${Math.round(s.partDelayMs)})  ; ${s.degrees}°`]
     case 'moveTo':
       return [`MouseMove(${s.x}, ${s.y}, 0)`]
+    case 'block': {
+      const v = s.on ? 'true' : 'false'
+      const lines: string[] = []
+      if (s.target !== 'mouse') lines.push(`BlockKeyboard(${v})`)
+      if (s.target !== 'keyboard') lines.push(`BlockMouse(${v})`)
+      return lines
+    }
   }
 }
 
@@ -177,6 +187,67 @@ Turn(counts, parts, delayMs) {
         done := target
         if (A_Index < parts && delayMs > 0)
             PreciseSleep(delayMs)
+    }
+}
+
+; 封鎖你自己的鍵盤：腳本用 SendInput 送出的按鍵不會被擋。Shift/Ctrl/Alt/Win 無法封鎖
+global KeyBlocker := 0
+BlockKeyboard(on) {
+    global KeyBlocker
+    if (on && !KeyBlocker) {
+        KeyBlocker := InputHook("L0")
+        KeyBlocker.KeyOpt("{All}", "S")
+        KeyBlocker.Start()
+    } else if (!on && KeyBlocker) {
+        KeyBlocker.Stop()
+        KeyBlocker := 0
+        ReleaseStuck(BlockableKeys())
+    }
+}
+
+; 封鎖你自己的滑鼠：按鍵、滾輪和移動
+global MouseBlocked := false
+MouseButtons := ["LButton", "RButton", "MButton", "XButton1", "XButton2"]
+BlockMouse(on) {
+    global MouseBlocked
+    if (on = MouseBlocked)
+        return
+    MouseBlocked := on
+    HotIf()
+    for k in MouseButtons
+        Hotkey("*" k, NoOp, on ? "On" : "Off")
+    Hotkey("*WheelUp", NoOp, on ? "On" : "Off")
+    Hotkey("*WheelDown", NoOp, on ? "On" : "Off")
+    BlockInput(on ? "MouseMove" : "MouseMoveOff")
+    if (!on)
+        ReleaseStuck(MouseButtons)
+}
+
+UnblockAll() {
+    BlockKeyboard(false)
+    BlockMouse(false)
+}
+
+NoOp(*) {
+}
+
+BlockableKeys() {
+    static keys := ""
+    if (keys = "") {
+        keys := []
+        Loop Parse "abcdefghijklmnopqrstuvwxyz0123456789"
+            keys.Push(A_LoopField)
+        for k in ["Space", "Tab", "Enter", "Escape", "Backspace", "Up", "Down", "Left", "Right"]
+            keys.Push(k)
+    }
+    return keys
+}
+
+; 封鎖期間放開的鍵，遊戲沒收到「放開」，解除時補送
+ReleaseStuck(keys) {
+    for k in keys {
+        if (GetKeyState(k) && !GetKeyState(k, "P"))
+            Send("{" k " up}")
     }
 }
 
@@ -227,9 +298,13 @@ export function generate(macros: Macro[], settings: Settings): GenerateResult {
     out.push(`; ${cleanComment(m.name)}`)
     if (m.note) out.push(`; ${cleanComment(m.note)}`)
     out.push(`Macro${i + 1}(*) {`)
+    const blocks = m.steps.some((s) => s.type === 'block')
+    const indent = blocks ? '        ' : '    '
+    if (blocks) out.push('    try {')
     for (const s of m.steps) {
-      for (const line of stepLines(s, settings)) out.push(`    ${line}`)
+      for (const line of stepLines(s, settings)) out.push(`${indent}${line}`)
     }
+    if (blocks) out.push('    } finally {', '        UnblockAll()', '    }')
     out.push('}', '')
   })
 
