@@ -1,4 +1,4 @@
-# TSB 巨集編輯器
+# TSB 巨屌編輯器
 
 用「步驟卡片」製作 The Strongest Battlegrounds（Roblox）技巧巨集的桌面程式。
 不用會寫 AutoHotkey：排好按鍵、等待、轉視角等步驟，編輯器會產生 AutoHotkey v2 腳本並幫你執行。

@@ -318,7 +318,7 @@ export function generate(macros: Macro[], settings: Settings): GenerateResult {
   const needsAdmin = enabled.some((m) => m.steps.some((s) => s.type === 'block'))
   const out: string[] = []
   out.push(
-    '; 由 TSB 巨集編輯器產生，請在編輯器裡修改，直接改這個檔案會被覆蓋',
+    '; 由 TSB 巨屌編輯器產生，請在編輯器裡修改，直接改這個檔案會被覆蓋',
     '#Requires AutoHotkey v2.0',
     '#SingleInstance Force',
     'SendMode("Input")',
