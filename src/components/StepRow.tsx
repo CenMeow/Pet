@@ -97,7 +97,7 @@ export function StepRow({ step, index, total, settings, hasError, onChange, onMo
             <option value="keyboard">鍵盤</option>
             <option value="mouse">滑鼠</option>
           </select>
-          <span className="hint">只擋你自己的輸入，巨集送出的照常；巨集結束會自動解除</span>
+          <span className="hint">只擋你自己的輸入，巨集送出的照常；結束會自動解除。有這個步驟時，執行會跳出系統管理員確認</span>
         </>
       )
       break

@@ -172,12 +172,20 @@ describe('block input', () => {
       { id: 'b2', type: 'block', target: 'keyboard', on: false },
     ] })], defaultSettings)
     expect(problems).toEqual([])
-    expect(script).toContain('    try {\r\n        BlockKeyboard(true)\r\n        BlockMouse(true)\r\n        Send("{q}")\r\n        BlockKeyboard(false)\r\n    } finally {\r\n        UnblockAll()\r\n    }')
+    expect(script).toContain('    try {\r\n        BlockAll(true)\r\n        Send("{q}")\r\n        BlockKeyboard(false)\r\n    } finally {\r\n        UnblockAll()\r\n    }')
     const parsed = parseLibraryJson(serializeLibrary(defaultSettings, [macro({ steps: [{ id: 'b', type: 'block', target: 'mouse', on: false }] })]))
     expect(parsed.macros[0].steps[0]).toMatchObject({ type: 'block', target: 'mouse', on: false })
+  })
+  it('relaunches as admin only when blocking is used', () => {
+    const withBlock = generate([macro({ steps: [{ id: 'b', type: 'block', target: 'keyboard', on: true }] })], defaultSettings).script
+    expect(withBlock).toContain(`Run('*RunAs "' A_AhkPath '" /restart "' A_ScriptFullPath '"')`)
+    expect(withBlock).toContain('BlockKeyboard(true)')
+    expect(withBlock).toContain('"RCtrl", "``", "-"')
+    expect(withBlock).toContain('FileExist(A_ScriptDir "\\stop.flag")')
   })
   it('leaves macros without block steps unwrapped', () => {
     const { script } = generate([macro({ steps: [{ id: 't', type: 'tap', key: 'q' }] })], defaultSettings)
     expect(script).not.toContain('    try {')
+    expect(script).not.toContain('*RunAs')
   })
 })

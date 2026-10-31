@@ -2,6 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::sync::Mutex;
+use std::time::{Duration, SystemTime};
 
 use tauri::{Manager, RunEvent, State};
 
@@ -10,6 +11,46 @@ use tauri::{Manager, RunEvent, State};
 struct Runner(Mutex<Option<Child>>);
 
 const SCRIPT_NAME: &str = "tsb-macros.ahk";
+/// 腳本看到這個檔案就會自己結束（系統管理員模式下編輯器不能直接關閉它）
+const STOP_FLAG: &str = "stop.flag";
+/// 腳本大約每秒更新一次這個檔案，用來判斷是否還在執行
+const HEARTBEAT: &str = "heartbeat";
+
+fn script_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("找不到資料夾：{e}"))?;
+    fs::create_dir_all(&dir).map_err(|e| format!("建立資料夾失敗：{e}"))?;
+    Ok(dir)
+}
+
+fn heartbeat_fresh(dir: &Path) -> bool {
+    fs::metadata(dir.join(HEARTBEAT))
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| SystemTime::now().duration_since(t).ok())
+        .map(|age| age < Duration::from_millis(2500))
+        .unwrap_or(false)
+}
+
+/// 請腳本自己結束，並等它停下來（最多約 1.5 秒）
+fn request_stop(dir: &Path) {
+    let _ = fs::write(dir.join(STOP_FLAG), b"stop");
+    for _ in 0..15 {
+        if !heartbeat_fresh(dir) {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+        // 腳本結束後不再更新 heartbeat；直接刪掉以免誤判
+        if let Ok(m) = fs::metadata(dir.join(HEARTBEAT)).and_then(|m| m.modified()) {
+            if SystemTime::now().duration_since(m).map(|a| a > Duration::from_millis(1200)).unwrap_or(false) {
+                break;
+            }
+        }
+    }
+    let _ = fs::remove_file(dir.join(HEARTBEAT));
+}
 
 /// 常見的 AutoHotkey v2 安裝位置
 fn ahk_candidates() -> Vec<PathBuf> {
@@ -79,16 +120,15 @@ fn run_script(
         return Err("AutoHotkey 只能在 Windows 上執行".into());
     }
     let ahk = find_ahk(&ahk_path)?;
-    let dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("找不到資料夾：{e}"))?;
-    fs::create_dir_all(&dir).map_err(|e| format!("建立資料夾失敗：{e}"))?;
+    let dir = script_dir(&app)?;
+
+    // 先停掉上一次的（包含系統管理員模式下跑的），再啟動新的
+    request_stop(&dir);
+    kill_child(&runner);
+    let _ = fs::remove_file(dir.join(STOP_FLAG));
+
     let script_path = dir.join(SCRIPT_NAME);
     write_utf8_bom(&script_path, &script)?;
-
-    // 先停掉上一次的，再啟動新的
-    kill_child(&runner);
     let child = Command::new(&ahk)
         .arg("/ErrorStdOut")
         .arg(&script_path)
@@ -99,14 +139,20 @@ fn run_script(
 }
 
 #[tauri::command]
-fn stop_script(runner: State<'_, Runner>) -> bool {
-    let was_running = script_running(runner.clone());
+fn stop_script(app: tauri::AppHandle, runner: State<'_, Runner>) -> bool {
+    let was_running = script_running(app.clone(), runner.clone());
+    if let Ok(dir) = script_dir(&app) {
+        request_stop(&dir);
+    }
     kill_child(&runner);
     was_running
 }
 
 #[tauri::command]
-fn script_running(runner: State<'_, Runner>) -> bool {
+fn script_running(app: tauri::AppHandle, runner: State<'_, Runner>) -> bool {
+    if script_dir(&app).map(|d| heartbeat_fresh(&d)).unwrap_or(false) {
+        return true;
+    }
     let Ok(mut guard) = runner.0.lock() else {
         return false;
     };
@@ -158,6 +204,9 @@ pub fn run() {
     app.run(|handle, event| {
         // 關掉編輯器時一併停止巨集
         if let RunEvent::Exit = event {
+            if let Ok(dir) = script_dir(handle) {
+                let _ = fs::write(dir.join(STOP_FLAG), b"stop");
+            }
             kill_child(&handle.state::<Runner>());
         }
     });

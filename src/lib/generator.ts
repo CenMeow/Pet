@@ -153,8 +153,9 @@ function stepLines(s: Step, settings: Settings): string[] {
     case 'block': {
       const v = s.on ? 'true' : 'false'
       const lines: string[] = []
-      if (s.target !== 'mouse') lines.push(`BlockKeyboard(${v})`)
-      if (s.target !== 'keyboard') lines.push(`BlockMouse(${v})`)
+      if (s.target === 'all') lines.push(`BlockAll(${v})`)
+      if (s.target === 'keyboard') lines.push(`BlockKeyboard(${v})`)
+      if (s.target === 'mouse') lines.push(`BlockMouse(${v})`)
       return lines
     }
   }
@@ -190,19 +191,48 @@ Turn(counts, parts, delayMs) {
     }
 }
 
-; 封鎖你自己的鍵盤：腳本用 SendInput 送出的按鍵不會被擋。Shift/Ctrl/Alt/Win 無法封鎖
-global KeyBlocker := 0
-BlockKeyboard(on) {
-    global KeyBlocker
-    if (on && !KeyBlocker) {
-        KeyBlocker := InputHook("L0")
-        KeyBlocker.KeyOpt("{All}", "S")
-        KeyBlocker.Start()
-    } else if (!on && KeyBlocker) {
-        KeyBlocker.Stop()
-        KeyBlocker := 0
-        ReleaseStuck(BlockableKeys())
+WatchEditor() {
+    static beats := 0
+    if FileExist(A_ScriptDir "\\stop.flag")
+        ExitApp()
+    beats += 1
+    if (Mod(beats, 3) = 1) {
+        try FileOpen(A_ScriptDir "\\heartbeat", "w").Write(A_TickCount)
     }
+}
+
+; 系統管理員模式下用 Windows 的 BlockInput 擋住全部實體輸入（包含 Shift 和滑鼠轉鏡頭）
+global FullBlocked := false
+BlockAll(on) {
+    global FullBlocked
+    if (A_IsAdmin) {
+        if (on != FullBlocked) {
+            BlockInput(on ? "On" : "Off")
+            FullBlocked := on
+        }
+        if (!on) {
+            ReleaseStuck(BlockableKeys())
+            ReleaseStuck(MouseButtons)
+        }
+        return
+    }
+    BlockKeyboard(on)
+    BlockMouse(on)
+}
+
+; 封鎖你自己的鍵盤：替每個鍵註冊一個什麼都不做的熱鍵把它吃掉。
+; 巨集用 SendInput 送出的按鍵不會觸發熱鍵，所以照常送進遊戲
+global KeysBlocked := false
+BlockKeyboard(on) {
+    global KeysBlocked
+    if (on = KeysBlocked)
+        return
+    KeysBlocked := on
+    HotIf()
+    for k in BlockableKeys()
+        try Hotkey("*" k, NoOp, on ? "On" : "Off")
+    if (!on)
+        ReleaseStuck(BlockableKeys())
 }
 
 ; 封鎖你自己的滑鼠：按鍵、滾輪和移動
@@ -224,6 +254,7 @@ BlockMouse(on) {
 }
 
 UnblockAll() {
+    BlockAll(false)
     BlockKeyboard(false)
     BlockMouse(false)
 }
@@ -232,12 +263,13 @@ NoOp(*) {
 }
 
 BlockableKeys() {
-    static keys := ""
-    if (keys = "") {
+    static keys := 0
+    if (!IsObject(keys)) {
         keys := []
         Loop Parse "abcdefghijklmnopqrstuvwxyz0123456789"
             keys.Push(A_LoopField)
-        for k in ["Space", "Tab", "Enter", "Escape", "Backspace", "Up", "Down", "Left", "Right"]
+        for k in ["Space", "Tab", "Enter", "Escape", "Backspace", "Up", "Down", "Left", "Right",
+                  "LShift", "RShift", "LCtrl", "RCtrl", "\`\`", "-", "=", "[", "]", "\\", "'", ",", ".", "/"]
             keys.Push(k)
     }
     return keys
@@ -265,6 +297,7 @@ export function generate(macros: Macro[], settings: Settings): GenerateResult {
   }
 
   const enabled = macros.filter((m) => m.enabled)
+  const needsAdmin = enabled.some((m) => m.steps.some((s) => s.type === 'block'))
   const out: string[] = []
   out.push(
     '; 由 TSB 巨集編輯器產生，請在編輯器裡修改，直接改這個檔案會被覆蓋',
@@ -276,7 +309,21 @@ export function generate(macros: Macro[], settings: Settings): GenerateResult {
     'DllCall("winmm\\timeBeginPeriod", "UInt", 1)',
     '',
     'global MacrosEnabled := true',
-    'ToolTip("TSB 巨集已載入")',
+    ...(needsAdmin
+      ? [
+          '; 有「封鎖輸入」步驟：用系統管理員身分重新啟動，才能真正擋住 Roblox 讀到的輸入',
+          'if (!A_IsAdmin) {',
+          '    try {',
+          `        Run('*RunAs "' A_AhkPath '" /restart "' A_ScriptFullPath '"')`,
+          '        ExitApp()',
+          '    }',
+          '    ; 拒絕權限確認時，改用一般模式繼續執行',
+          '}',
+        ]
+      : []),
+    '; 編輯器透過 stop.flag 要求停止，透過 heartbeat 判斷是否執行中（系統管理員模式下編輯器無法直接關閉腳本）',
+    'SetTimer(WatchEditor, 300)',
+    'ToolTip(A_IsAdmin ? "TSB 巨集已載入（系統管理員）" : "TSB 巨集已載入")',
     'SetTimer(() => ToolTip(), -1500)',
     '',
     `${hotkeyDef(settings.exitHotkey)}::ExitApp()`,
