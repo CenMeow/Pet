@@ -196,11 +196,14 @@ Turn(counts, parts, delayMs) {
 ; 讀 Roblox 存檔裡的滑鼠靈敏度，讓轉視角角度不受遊戲設定影響
 RefreshSens() {
     global CurSens
-    newest := "", newestTime := ""
-    Loop Files EnvGet("LOCALAPPDATA") "\\Roblox\\GlobalBasicSettings_*.xml" {
-        if (A_LoopFileTimeModified > newestTime) {
-            newestTime := A_LoopFileTimeModified
-            newest := A_LoopFileFullPath
+    newest := "", newestTime := 0
+    try {
+        Loop Files EnvGet("LOCALAPPDATA") "\\Roblox\\GlobalBasicSettings_*.xml" {
+            t := Integer(A_LoopFileTimeModified)
+            if (t > newestTime) {
+                newestTime := t
+                newest := A_LoopFileFullPath
+            }
         }
     }
     val := 0
@@ -229,7 +232,6 @@ WatchEditor() {
 }
 
 ; 系統管理員模式下用 Windows 的 BlockInput 擋住全部實體輸入（包含 Shift 和滑鼠轉鏡頭）
-global FullBlocked := false
 BlockAll(on) {
     global FullBlocked
     if (A_IsAdmin) {
@@ -253,7 +255,6 @@ BlockAll(on) {
 
 ; 封鎖你自己的鍵盤：替每個鍵註冊一個什麼都不做的熱鍵把它吃掉。
 ; 巨集用 SendInput 送出的按鍵不會觸發熱鍵，所以照常送進遊戲
-global KeysBlocked := false
 BlockKeyboard(on) {
     global KeysBlocked
     if (on = KeysBlocked)
@@ -269,8 +270,6 @@ BlockKeyboard(on) {
 }
 
 ; 封鎖你自己的滑鼠：按鍵、滾輪和移動
-global MouseBlocked := false
-MouseButtons := ["LButton", "RButton", "MButton", "XButton1", "XButton2"]
 BlockMouse(on) {
     global MouseBlocked
     if (on = MouseBlocked)
@@ -354,6 +353,10 @@ export function generate(macros: Macro[], settings: Settings): GenerateResult {
     'DllCall("winmm\\timeBeginPeriod", "UInt", 1)',
     '',
     'global MacrosEnabled := true',
+    'global FullBlocked := false',
+    'global KeysBlocked := false',
+    'global MouseBlocked := false',
+    'global MouseButtons := ["LButton", "RButton", "MButton", "XButton1", "XButton2"]',
     ...(needsAdmin
       ? [
           '; 有「封鎖輸入」步驟：用系統管理員身分重新啟動，才能真正擋住 Roblox 讀到的輸入',
