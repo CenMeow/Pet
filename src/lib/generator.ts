@@ -206,13 +206,17 @@ global FullBlocked := false
 BlockAll(on) {
     global FullBlocked
     if (A_IsAdmin) {
-        if (on != FullBlocked) {
-            BlockInput(on ? "On" : "Off")
-            FullBlocked := on
-        }
-        if (!on) {
-            ReleaseStuck(BlockableKeys())
-            ReleaseStuck(MouseButtons)
+        if (on = FullBlocked)
+            return
+        FullBlocked := on
+        if (on) {
+            ReleaseHeld(BlockableKeys())
+            ReleaseHeld(MouseButtons)
+            BlockInput("On")
+        } else {
+            BlockInput("Off")
+            RestoreHeld(BlockableKeys())
+            RestoreHeld(MouseButtons)
         }
         return
     }
@@ -228,11 +232,13 @@ BlockKeyboard(on) {
     if (on = KeysBlocked)
         return
     KeysBlocked := on
+    if (on)
+        ReleaseHeld(BlockableKeys())
     HotIf()
     for k in BlockableKeys()
         try Hotkey("*" k, NoOp, on ? "On" : "Off")
     if (!on)
-        ReleaseStuck(BlockableKeys())
+        RestoreHeld(BlockableKeys())
 }
 
 ; 封鎖你自己的滑鼠：按鍵、滾輪和移動
@@ -243,6 +249,8 @@ BlockMouse(on) {
     if (on = MouseBlocked)
         return
     MouseBlocked := on
+    if (on)
+        ReleaseHeld(MouseButtons)
     HotIf()
     for k in MouseButtons
         Hotkey("*" k, NoOp, on ? "On" : "Off")
@@ -250,7 +258,7 @@ BlockMouse(on) {
     Hotkey("*WheelDown", NoOp, on ? "On" : "Off")
     BlockInput(on ? "MouseMove" : "MouseMoveOff")
     if (!on)
-        ReleaseStuck(MouseButtons)
+        RestoreHeld(MouseButtons)
 }
 
 UnblockAll() {
@@ -275,10 +283,20 @@ BlockableKeys() {
     return keys
 }
 
-; 封鎖期間放開的鍵，遊戲沒收到「放開」，解除時補送
-ReleaseStuck(keys) {
+; 開始封鎖時，你手上按著的鍵先送出「放開」，遊戲才不會以為它一直被按著
+ReleaseHeld(keys) {
     for k in keys {
-        if (GetKeyState(k) && !GetKeyState(k, "P"))
+        if (GetKeyState(k, "P"))
+            Send("{" k " up}")
+    }
+}
+
+; 解除封鎖時：還按著的鍵補送「按下」，封鎖期間放開的補送「放開」
+RestoreHeld(keys) {
+    for k in keys {
+        if (GetKeyState(k, "P"))
+            Send("{" k " down}")
+        else if (GetKeyState(k))
             Send("{" k " up}")
     }
 }
@@ -323,6 +341,7 @@ export function generate(macros: Macro[], settings: Settings): GenerateResult {
       : []),
     '; 編輯器透過 stop.flag 要求停止，透過 heartbeat 判斷是否執行中（系統管理員模式下編輯器無法直接關閉腳本）',
     'SetTimer(WatchEditor, 300)',
+    ...(needsAdmin ? ['; 讀取實體按鍵狀態需要鍵盤、滑鼠 hook', 'InstallKeybdHook()', 'InstallMouseHook()'] : []),
     'ToolTip(A_IsAdmin ? "TSB 巨集已載入（系統管理員）" : "TSB 巨集已載入")',
     'SetTimer(() => ToolTip(), -1500)',
     '',

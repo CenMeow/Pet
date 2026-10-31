@@ -189,3 +189,12 @@ describe('block input', () => {
     expect(script).not.toContain('*RunAs')
   })
 })
+
+describe('held keys', () => {
+  it('releases keys held before blocking and restores them after', () => {
+    const { script } = generate([macro({ steps: [{ id: 'b', type: 'block', target: 'all', on: true }] })], defaultSettings)
+    expect(script).toContain('ReleaseHeld(BlockableKeys())\n            ReleaseHeld(MouseButtons)\n            BlockInput("On")')
+    expect(script).toContain('RestoreHeld(keys) {')
+    expect(script).toContain('InstallKeybdHook()')
+  })
+})
