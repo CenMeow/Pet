@@ -43,9 +43,9 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          # 推 v 開頭的 tag 時發佈 Release（含 latest.json，給自動更新用）
-          tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
-          releaseName: ${{ startsWith(github.ref, 'refs/tags/v') && format('TSB 巨集編輯器 {0}', github.ref_name) || '' }}
+          # main 每次推送都發佈（或更新）目前版本的 Release，含 latest.json 給自動更新用
+          tagName: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'v__VERSION__' || '' }}
+          releaseName: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'TSB 巨屌編輯器 v__VERSION__' || '' }}
           releaseDraft: false
       - name: Upload installer
         uses: actions/upload-artifact@v4
