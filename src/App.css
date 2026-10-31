@@ -126,3 +126,4 @@ kbd { background: var(--panel2); border: 1px solid var(--border); border-radius:
 .drop-slot.drop-target-after { border-bottom: 2px solid var(--accent); }
 .step-row.dragging { opacity: .5; }
 body:has(.step-row.dragging) { cursor: grabbing; user-select: none; }
+button.update { background: #2f5b3f; border-color: var(--ok); }

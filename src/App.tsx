@@ -6,7 +6,8 @@ import { keyLabel } from './lib/keys'
 import { macroFromTemplate } from './lib/templates'
 import { parseMgp } from './lib/mgp'
 import { loadLibrary, parseLibraryJson, saveLibrary, serializeLibrary } from './lib/storage'
-import { isScriptRunning, isTauri, openTextFile, runScript, saveTextFile, stopScript } from './lib/native'
+import { checkUpdate, installUpdate, isScriptRunning, isTauri, openTextFile, runScript, saveTextFile, stopScript } from './lib/native'
+import type { Update } from '@tauri-apps/plugin-updater'
 import { MacroEditor } from './components/MacroEditor'
 import { SettingsPanel } from './components/SettingsPanel'
 import { TemplatePicker } from './components/TemplatePicker'
@@ -24,6 +25,23 @@ export default function App() {
   const [showScript, setShowScript] = useState(false)
   const [running, setRunning] = useState(false)
   const [toast, setToast] = useState<Toast>(null)
+  const [update, setUpdate] = useState<Update | null>(null)
+  const [updating, setUpdating] = useState(false)
+
+  useEffect(() => {
+    checkUpdate().then(setUpdate)
+  }, [])
+
+  const handleUpdate = async () => {
+    if (!update) return
+    setUpdating(true)
+    try {
+      await installUpdate(update)
+    } catch (e) {
+      setUpdating(false)
+      setToast({ kind: 'error', text: `更新失敗：${e instanceof Error ? e.message : String(e)}` })
+    }
+  }
 
   useEffect(() => saveLibrary(settings, macros), [settings, macros])
 
@@ -158,6 +176,11 @@ export default function App() {
           {running ? `執行中（${keyLabel(settings.toggleHotkey)} 開關、${keyLabel(settings.exitHotkey)} 結束）` : '未執行'}
         </div>
         <span className="spacer" />
+        {update && (
+          <button type="button" className="update" onClick={handleUpdate} disabled={updating}>
+            {updating ? '更新中…' : `更新到 ${update.version}`}
+          </button>
+        )}
         <button type="button" className="primary" onClick={handleRun} disabled={errors.length > 0}>
           {running ? '套用變更' : '▶ 執行'}
         </button>
@@ -214,7 +237,7 @@ export default function App() {
               onDelete={() => deleteMacro(selected.id)}
             />
           ) : (
-            <div className="empty big">按左上角「新增巨集」開始，可以從範本挑一個。</div>
+            <div className="empty big">還沒有巨集</div>
           )}
 
           {problems.length > 0 && (
@@ -239,7 +262,7 @@ export default function App() {
         )}
       </div>
 
-      {!isTauri && <div className="browser-note">瀏覽器預覽模式：可以編輯和匯出，但「執行」只能在桌面版使用。</div>}
+      {!isTauri && <div className="browser-note">預覽模式，不能執行</div>}
       {toast && <div className={`toast ${toast.kind}`} onClick={() => setToast(null)}>{toast.text}</div>}
       {showTemplates && (
         <TemplatePicker

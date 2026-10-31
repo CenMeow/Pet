@@ -84,7 +84,7 @@ export function MacroEditor({ macro, settings, problems, onChange, onDuplicate, 
           </label>
           <label className="check" title="勾選後，觸發鍵本身也會照常送進遊戲">
             <input type="checkbox" checked={macro.passThrough} onChange={(e) => onChange({ ...macro, passThrough: e.target.checked })} />
-            觸發鍵照常輸入
+            按鍵穿透
           </label>
           <span className="spacer" />
           <button type="button" onClick={onDuplicate}>複製巨集</button>
@@ -93,7 +93,7 @@ export function MacroEditor({ macro, settings, problems, onChange, onDuplicate, 
         <textarea
           className="macro-note"
           value={macro.note ?? ''}
-          placeholder="備註（例如這招的用途、要先開 shift lock 等）"
+          placeholder="備註"
           rows={2}
           onChange={(e) => onChange({ ...macro, note: e.target.value || undefined })}
         />
@@ -107,11 +107,11 @@ export function MacroEditor({ macro, settings, problems, onChange, onDuplicate, 
           </button>
         ))}
         <span className="spacer" />
-        <span className="hint">共 {macro.steps.length} 步，約 {Math.round(estimateDuration(macro.steps))} 毫秒</span>
+        <span className="hint">{macro.steps.length} 步 · {Math.round(estimateDuration(macro.steps))} ms</span>
       </div>
 
       <div className="steps-list" ref={listRef}>
-        {macro.steps.length === 0 && <div className="empty">還沒有步驟。用上面的按鈕新增，步驟會由上往下依序執行。</div>}
+        {macro.steps.length === 0 && <div className="empty">還沒有步驟</div>}
         {macro.steps.map((s, i) => (
           <div
             key={s.id}

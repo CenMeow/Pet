@@ -1,6 +1,8 @@
 // 與 Tauri 後端（Rust）溝通。在一般瀏覽器裡開發時，這些功能會改用替代做法或提示。
 import { invoke } from '@tauri-apps/api/core'
 import { open, save } from '@tauri-apps/plugin-dialog'
+import { check, type Update } from '@tauri-apps/plugin-updater'
+import { relaunch } from '@tauri-apps/plugin-process'
 
 export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
@@ -62,4 +64,21 @@ export async function openTextFile(exts: string[], label: string): Promise<{ nam
   const text = await invoke<string>('read_text_file', { path })
   const name = path.split(/[\\/]/).pop() ?? path
   return { name, text }
+}
+
+/** 檢查 GitHub Releases 有沒有新版 */
+export async function checkUpdate(): Promise<Update | null> {
+  if (!isTauri) return null
+  try {
+    return await check()
+  } catch {
+    return null
+  }
+}
+
+/** 停掉巨集、下載安裝新版並重新啟動 */
+export async function installUpdate(update: Update): Promise<void> {
+  await stopScript().catch(() => false)
+  await update.downloadAndInstall()
+  await relaunch()
 }
