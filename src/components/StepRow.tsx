@@ -72,7 +72,14 @@ export function StepRow({ step, index, total, hasError, onChange, onMove, onDupl
     case 'turn':
       body = (
         <>
-          <NumberField value={step.degrees} onChange={(degrees) => onChange({ ...step, degrees })} />
+          <select value={step.degrees < 0 ? 'left' : 'right'} onChange={(e) => {
+            const abs = Math.abs(step.degrees)
+            onChange({ ...step, degrees: e.target.value === 'left' ? -abs : abs })
+          }}>
+            <option value="left">向左</option>
+            <option value="right">向右</option>
+          </select>
+          <NumberField value={Math.abs(step.degrees)} min={0} onChange={(n) => onChange({ ...step, degrees: step.degrees < 0 ? -Math.abs(n) : Math.abs(n) })} />
           <span className="unit">度</span>
           <span className="unit">分</span>
           <NumberField value={step.parts} min={1} width={50} onChange={(parts) => onChange({ ...step, parts })} />
