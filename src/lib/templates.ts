@@ -4,7 +4,8 @@ import type { Macro, Step } from './types'
 import { newId } from './types'
 
 type StepSpec =
-  | ['tap' | 'down' | 'up', string]
+  | ['tap', string, number?]
+  | ['down' | 'up', string]
   | ['wait', number]
   | ['turn', number, number?, number?]
   | ['moveTo', number, number]
@@ -14,6 +15,7 @@ function build(specs: StepSpec[]): Step[] {
     const id = newId()
     switch (s[0]) {
       case 'tap':
+        return s[2] ? { id, type: 'tap', key: s[1], holdMs: s[2] } : { id, type: 'tap', key: s[1] }
       case 'down':
       case 'up':
         return { id, type: s[0], key: s[1] }
@@ -55,15 +57,17 @@ export const TEMPLATES: Template[] = [
     ],
   },
   {
-    key: 'emote-backdash-jaharia',
-    name: 'Emote backdash（自動點表情）',
-    hotkey: 't',
-    description: '先關 shift lock，把滑鼠移到表情位置（1124, 543 是 1920×1080 的位置，解析度不同要改），B 開表情後點選，再後閃取消，最後開回 shift lock。',
+    key: 'emote-backdash-auto',
+    name: 'Emote backdash（自動點 Drum Major）',
+    hotkey: 'c',
+    description: '照 Rachan 的按法，但先按 Shift 解除 shift lock，再把滑鼠移到表情輪盤正下方的 Drum Major（957, 700，以 1920×1080 全螢幕為準）點選，最後按 Shift 開回 shift lock。S 按多久用第 14 步的等待時間調整（預設 40 毫秒）。',
     steps: [
-      ['tap', 'Shift'], ['wait', 20], ['moveTo', 1124, 542], ['moveTo', 1122, 543], ['moveTo', 1124, 543], ['wait', 10],
-      ['tap', 'b'], ['wait', 40], ['tap', 'LButton'], ['wait', 20],
-      ['down', 's'], ['wait', 10], ['tap', 'q'], ['up', 's'], ['wait', 20],
-      ['tap', 'LButton'], ['wait', 80], ['tap', 'Shift'],
+      ['tap', 'Shift'], ['wait', 20],
+      ['moveTo', 957, 700], ['moveTo', 955, 701], ['moveTo', 957, 701], ['wait', 10],
+      ['tap', 'b'], ['down', 'LButton'], ['wait', 10], ['up', 'LButton'],
+      ['down', 's'], ['wait', 10], ['tap', 'q'], ['wait', 40], ['up', 's'],
+      ['tap', 'LButton'], ['wait', 30], ['tap', 'Space', 30],
+      ['wait', 20], ['tap', 'Shift'],
     ],
   },
   {

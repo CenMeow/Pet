@@ -46,6 +46,16 @@ export function StepRow({ step, index, total, settings, hasError, onChange, onMo
   let body: ReactNode
   switch (step.type) {
     case 'tap':
+      body = (
+        <>
+          <KeyCapture value={step.key} onChange={(key) => onChange({ ...step, key })} />
+          <span className="unit">按住</span>
+          <NumberField value={step.holdMs ?? 0} min={0} width={60} onChange={(holdMs) => onChange({ ...step, holdMs })} />
+          <span className="unit">毫秒</span>
+          <span className="hint">0 = 一按就放</span>
+        </>
+      )
+      break
     case 'down':
     case 'up':
       body = <KeyCapture value={step.key} onChange={(key) => onChange({ ...step, key })} />

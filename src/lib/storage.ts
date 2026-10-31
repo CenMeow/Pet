@@ -17,7 +17,10 @@ function parseStep(raw: unknown): Step | null {
   const r = raw as Record<string, unknown>
   const id = newId()
   switch (r.type) {
-    case 'tap':
+    case 'tap': {
+      const holdMs = num(r.holdMs, 0)
+      return holdMs > 0 ? { id, type: 'tap', key: str(r.key), holdMs } : { id, type: 'tap', key: str(r.key) }
+    }
     case 'down':
     case 'up':
       return { id, type: r.type, key: str(r.key) }

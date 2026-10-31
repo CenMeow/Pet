@@ -1,7 +1,8 @@
 // 巨集資料模型。編輯器只操作這些資料，AHK 腳本一律由 generator.ts 產生。
 
 export type Step =
-  | { id: string; type: 'tap'; key: string }
+  /** holdMs > 0 時會按住這麼久再放開（按鍵時長） */
+  | { id: string; type: 'tap'; key: string; holdMs?: number }
   | { id: string; type: 'down'; key: string }
   | { id: string; type: 'up'; key: string }
   | { id: string; type: 'wait'; ms: number }

@@ -26,6 +26,7 @@ export function estimateDuration(steps: Step[]): number {
   let ms = 0
   for (const s of steps) {
     if (s.type === 'wait') ms += Math.max(0, s.ms)
+    if (s.type === 'tap' && s.holdMs) ms += Math.max(0, s.holdMs)
     if (s.type === 'turn') ms += Math.max(0, s.parts - 1) * Math.max(0, s.partDelayMs)
   }
   return ms
@@ -96,6 +97,9 @@ export function validate(macros: Macro[], settings: Settings): Problem[] {
       const at = { macroId: m.id, stepId: s.id }
       switch (s.type) {
         case 'tap':
+          if (s.holdMs !== undefined && (!isFiniteNumber(s.holdMs) || s.holdMs < 0)) problems.push({ level: 'error', ...at, message: `「${name}」的按鍵時長必須是 0 以上的數字` })
+          if (!normalizeKey(s.key)) problems.push({ level: 'error', ...at, message: `「${name}」有無法辨識的按鍵「${s.key}」` })
+          break
         case 'down':
         case 'up':
           if (!normalizeKey(s.key)) problems.push({ level: 'error', ...at, message: `「${name}」有無法辨識的按鍵「${s.key}」` })
@@ -129,6 +133,9 @@ export function validate(macros: Macro[], settings: Settings): Problem[] {
 function stepLines(s: Step, settings: Settings): string[] {
   switch (s.type) {
     case 'tap':
+      if (s.holdMs && s.holdMs > 0) {
+        return [`Send("{${sendKey(s.key)} down}")`, `PreciseSleep(${Math.round(s.holdMs)})`, `Send("{${sendKey(s.key)} up}")`]
+      }
       return [`Send("{${sendKey(s.key)}}")`]
     case 'down':
       return [`Send("{${sendKey(s.key)} down}")`]

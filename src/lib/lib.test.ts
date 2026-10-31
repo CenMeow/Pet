@@ -75,7 +75,7 @@ describe('generator', () => {
     expect(script).toContain('#HotIf MacrosEnabled && WinActive("ahk_exe RobloxPlayerBeta.exe")')
     expect(script).toContain('Send("{q}")')
     expect(script).toContain('Send("{s down}")')
-    expect(script).toContain('MouseMove(1124, 542, 0)')
+    expect(script).toContain('MouseMove(957, 700, 0)')
   })
 
   it('writes the Rachan macro as expected', () => {
@@ -142,5 +142,24 @@ describe('mouse hotkeys', () => {
     const problems = validate([macro({ hotkey: 'LButton' })], defaultSettings)
     expect(problems.some((p) => p.level === 'warning' && p.message.includes('滑鼠'))).toBe(true)
     expect(validate([macro({ hotkey: 'LButton', passThrough: true })], defaultSettings).some((p) => p.message.includes('滑鼠'))).toBe(false)
+  })
+})
+
+describe('hold duration', () => {
+  it('holds a tapped key for holdMs', () => {
+    const { script } = generate([macro({ steps: [{ id: 's', type: 'tap', key: 's', holdMs: 80 }] })], defaultSettings)
+    expect(script).toContain('    Send("{s down}")\r\n    PreciseSleep(80)\r\n    Send("{s up}")')
+    expect(estimateDuration([{ id: 's', type: 'tap', key: 's', holdMs: 80 }])).toBe(80)
+    const parsed = parseLibraryJson(serializeLibrary(defaultSettings, [macro({ steps: [{ id: 's', type: 'tap', key: 's', holdMs: 80 }] })]))
+    expect(parsed.macros[0].steps[0]).toMatchObject({ type: 'tap', key: 's', holdMs: 80 })
+  })
+
+  it('auto emote template unlocks shift lock and clicks Drum Major', () => {
+    const t = TEMPLATES.find((x) => x.key === 'emote-backdash-auto')!
+    const { script, problems } = generate([macroFromTemplate(t)], defaultSettings)
+    expect(problems).toEqual([])
+    const body = script.slice(script.indexOf('Macro1(*) {'))
+    expect(body.indexOf('Send("{Shift}")')).toBeLessThan(body.indexOf('MouseMove(957, 700, 0)'))
+    expect(body.indexOf('MouseMove(957, 700, 0)')).toBeLessThan(body.indexOf('Send("{b}")'))
   })
 })
