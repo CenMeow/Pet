@@ -34,6 +34,17 @@ function parseStep(raw: unknown): Step | null {
     }
     case 'moveTo':
       return { id, type: 'moveTo', x: Math.round(num(r.x, 0)), y: Math.round(num(r.y, 0)) }
+    case 'waitColor':
+      return {
+        id,
+        type: 'waitColor',
+        x: Math.round(num(r.x, 0)),
+        y: Math.round(num(r.y, 0)),
+        color: typeof r.color === 'string' && /^#[0-9a-f]{6}$/i.test(r.color) ? r.color.toUpperCase() : '#FFFFFF',
+        tolerance: Math.min(255, Math.max(0, Math.round(num(r.tolerance, 20)))),
+        timeoutMs: Math.max(1, num(r.timeoutMs, 1000)),
+        stopOnTimeout: r.stopOnTimeout !== false,
+      }
     default:
       return null
   }

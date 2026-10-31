@@ -108,7 +108,20 @@ function parseBody(lines: string[], settings: Settings, warn: (m: string) => voi
     l = l.replace(/^\{\s*/, '').replace(/\s*\}$/, '').trim()
     if (!l) continue
     let m: RegExpExecArray | null
-    if ((m = /^Send(?:Input|Event|Play)?\s*\(?\s*(["'])(.*)\1\s*\)?$/i.exec(l))) {
+    if ((m = /^(if\s*\(?\s*!\s*)?WaitColor\(\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*0x([0-9a-f]{6})\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)\s*\)?\s*(\{)?$/i.exec(l))) {
+      steps.push({
+        id: newId(),
+        type: 'waitColor',
+        x: Number(m[2]),
+        y: Number(m[3]),
+        color: `#${m[4].toUpperCase()}`,
+        tolerance: Number(m[5]),
+        timeoutMs: Number(m[6]),
+        stopOnTimeout: Boolean(m[1]),
+      })
+      // 逾時時的處理（放開按鍵、return）是編輯器自動產生的，跳過
+      if (m[7]) i = takeBlock(lines, i).end
+    } else if ((m = /^Send(?:Input|Event|Play)?\s*\(?\s*(["'])(.*)\1\s*\)?$/i.exec(l))) {
       steps.push(...sendSteps(m[2], warn))
     } else if ((m = /^Send(?:Input|Event|Play)?\s*,?\s+([^"'(].*)$/i.exec(l))) {
       steps.push(...sendSteps(m[1], warn)) // v1：Send {b}

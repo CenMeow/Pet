@@ -255,3 +255,41 @@ F1::ExitApp()`
     expect(parseAhk(v1, defaultSettings).macros[0].steps.map((s) => s.type)).toEqual(['tap', 'wait'])
   })
 })
+
+describe('wait color', () => {
+  const wc = (stopOnTimeout: boolean) => ({
+    id: 'w', type: 'waitColor' as const, x: 957, y: 700, color: '#F2C14E', tolerance: 20, timeoutMs: 1000, stopOnTimeout,
+  })
+
+  it('stops the macro and releases held keys when the color never shows up', () => {
+    const steps = [{ id: 'd', type: 'down' as const, key: 's' }, wc(true), { id: 'u', type: 'up' as const, key: 's' }, wc(true)]
+    const { script, problems } = generate([macro({ steps })], defaultSettings)
+    expect(problems.filter((p) => p.level === 'error')).toEqual([])
+    expect(script).toContain('CoordMode("Pixel", "Screen")')
+    expect(script).toContain('    if !WaitColor(957, 700, 0xF2C14E, 20, 1000) {\r\n        Send("{s up}")\r\n        return\r\n    }\r\n    Send("{s up}")')
+    // s 放開之後就不用再補放開
+    expect(script).toContain('    Send("{s up}")\r\n    if !WaitColor(957, 700, 0xF2C14E, 20, 1000)\r\n        return\r\n')
+    expect(script).toContain('WaitColor(x, y, color, variation, timeoutMs) {')
+  })
+
+  it('just waits when set to continue', () => {
+    const { script } = generate([macro({ steps: [wc(false)] })], defaultSettings)
+    expect(script).toContain('    WaitColor(957, 700, 0xF2C14E, 20, 1000)\r\n')
+    expect(script).not.toContain('if !WaitColor')
+  })
+
+  it('validates color and tolerance', () => {
+    const problems = validate([macro({ steps: [{ ...wc(true), color: 'red', tolerance: 300 }] })], defaultSettings)
+    expect(problems.filter((p) => p.level === 'error')).toHaveLength(2)
+  })
+
+  it('survives saving and .ahk import', async () => {
+    const lib = parseLibraryJson(serializeLibrary(defaultSettings, [macro({ steps: [wc(true)] })]))
+    expect(lib.macros[0].steps[0]).toMatchObject({ type: 'waitColor', x: 957, y: 700, color: '#F2C14E', tolerance: 20, timeoutMs: 1000, stopOnTimeout: true })
+    const { parseAhk } = await import('./ahkImport')
+    const steps = [{ id: 'd', type: 'down' as const, key: 's' }, wc(true), wc(false), { id: 'u', type: 'up' as const, key: 's' }]
+    const back = parseAhk(generate([macro({ steps })], defaultSettings).script, defaultSettings)
+    expect(back.warnings).toEqual([])
+    expect(back.macros[0].steps.map(({ id: _id, ...rest }) => rest)).toEqual(steps.map(({ id: _id, ...rest }) => rest))
+  })
+})

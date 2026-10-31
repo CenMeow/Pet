@@ -1,7 +1,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
 use tauri::{Manager, RunEvent, State};
@@ -190,6 +191,115 @@ fn read_text_file(path: String) -> Result<String, String> {
     Ok(String::from_utf8_lossy(bytes).into_owned())
 }
 
+/// 取色：目前這一次取色的編號。開始新的取色或取消時加一，舊的就會停下來
+#[derive(Default)]
+struct Picker(Arc<AtomicU64>);
+
+#[derive(serde::Serialize)]
+struct Picked {
+    x: i32,
+    y: i32,
+    /// #RRGGBB
+    color: String,
+}
+
+#[cfg(windows)]
+mod screen {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::{Duration, Instant};
+
+    #[repr(C)]
+    struct Point {
+        x: i32,
+        y: i32,
+    }
+
+    #[link(name = "user32")]
+    unsafe extern "system" {
+        fn GetCursorPos(point: *mut Point) -> i32;
+        fn GetAsyncKeyState(vk: i32) -> i16;
+        fn GetDC(hwnd: isize) -> isize;
+        fn ReleaseDC(hwnd: isize, hdc: isize) -> i32;
+        fn MessageBeep(kind: u32) -> i32;
+    }
+
+    #[link(name = "gdi32")]
+    unsafe extern "system" {
+        fn GetPixel(hdc: isize, x: i32, y: i32) -> u32;
+    }
+
+    const VK_ESCAPE: i32 = 0x1B;
+    const VK_F8: i32 = 0x77;
+
+    fn pressed(vk: i32) -> bool {
+        (unsafe { GetAsyncKeyState(vk) } as u16 & 0x8000) != 0
+    }
+
+    /// 等使用者按 F8，回傳滑鼠位置和那一點的顏色（0xRRGGBB）。Esc、逾時或被取消回傳 None
+    pub fn pick(current: &AtomicU64, id: u64) -> Result<Option<(i32, i32, u32)>, String> {
+        let start = Instant::now();
+        // F8 要先放開再按下才算，避免一開始就按著
+        let mut armed = !pressed(VK_F8);
+        loop {
+            if current.load(Ordering::SeqCst) != id || pressed(VK_ESCAPE) || start.elapsed() > Duration::from_secs(120) {
+                return Ok(None);
+            }
+            let f8 = pressed(VK_F8);
+            if f8 && armed {
+                let mut point = Point { x: 0, y: 0 };
+                if unsafe { GetCursorPos(&mut point) } == 0 {
+                    return Err("讀不到滑鼠位置".into());
+                }
+                let colorref = unsafe {
+                    let hdc = GetDC(0);
+                    if hdc == 0 {
+                        return Err("讀不到螢幕".into());
+                    }
+                    let c = GetPixel(hdc, point.x, point.y);
+                    ReleaseDC(0, hdc);
+                    c
+                };
+                if colorref == 0xFFFF_FFFF {
+                    return Err("讀不到這個位置的顏色".into());
+                }
+                unsafe { MessageBeep(0) };
+                // COLORREF 是 0x00BBGGRR
+                let rgb = ((colorref & 0xFF) << 16) | (colorref & 0xFF00) | ((colorref >> 16) & 0xFF);
+                return Ok(Some((point.x, point.y, rgb)));
+            }
+            if !f8 {
+                armed = true;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+}
+
+#[cfg(not(windows))]
+mod screen {
+    use std::sync::atomic::AtomicU64;
+
+    pub fn pick(_current: &AtomicU64, _id: u64) -> Result<Option<(i32, i32, u32)>, String> {
+        Err("只能在 Windows 上取色".into())
+    }
+}
+
+/// 在遊戲裡取色：滑鼠移到要的位置按 F8
+#[tauri::command]
+async fn pick_pixel(picker: State<'_, Picker>) -> Result<Option<Picked>, String> {
+    let current = picker.0.clone();
+    let id = current.fetch_add(1, Ordering::SeqCst) + 1;
+    let found = tauri::async_runtime::spawn_blocking(move || screen::pick(&current, id))
+        .await
+        .map_err(|e| format!("取色失敗：{e}"))??;
+    Ok(found.map(|(x, y, rgb)| Picked { x, y, color: format!("#{rgb:06X}") }))
+}
+
+#[tauri::command]
+fn cancel_pick(picker: State<'_, Picker>) {
+    picker.0.fetch_add(1, Ordering::SeqCst);
+}
+
 /// 回傳找到的 AutoHotkey v2 路徑
 #[tauri::command]
 fn detect_ahk(ahk_path: String) -> Result<String, String> {
@@ -218,6 +328,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(Runner::default())
+        .manage(Picker::default())
         .invoke_handler(tauri::generate_handler![
             run_script,
             stop_script,
@@ -225,7 +336,9 @@ pub fn run() {
             write_text_file,
             read_text_file,
             detect_ahk,
-            open_url
+            open_url,
+            pick_pixel,
+            cancel_pick
         ])
         .build(tauri::generate_context!())
         .expect("啟動應用程式失敗");

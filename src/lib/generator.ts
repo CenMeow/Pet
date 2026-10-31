@@ -118,6 +118,12 @@ export function validate(macros: Macro[], settings: Settings): Problem[] {
         case 'moveTo':
           if (!Number.isInteger(s.x) || !Number.isInteger(s.y)) problems.push({ level: 'error', ...at, message: `「${name}」的滑鼠座標要是整數` })
           break
+        case 'waitColor':
+          if (!Number.isInteger(s.x) || !Number.isInteger(s.y)) problems.push({ level: 'error', ...at, message: `「${name}」的取色座標要是整數` })
+          if (!/^#[0-9a-f]{6}$/i.test(s.color)) problems.push({ level: 'error', ...at, message: `「${name}」的顏色不正確` })
+          if (!Number.isInteger(s.tolerance) || s.tolerance < 0 || s.tolerance > 255) problems.push({ level: 'error', ...at, message: `「${name}」的顏色誤差要是 0–255 的整數` })
+          if (!isFiniteNumber(s.timeoutMs) || s.timeoutMs <= 0) problems.push({ level: 'error', ...at, message: `「${name}」的最多等待時間必須大於 0` })
+          break
       }
     }
     // 按住後沒放開的鍵
@@ -133,7 +139,8 @@ export function validate(macros: Macro[], settings: Settings): Problem[] {
   return problems
 }
 
-function stepLines(s: Step, settings: Settings): string[] {
+/** held：執行到這一步時，巨集自己按住還沒放開的鍵（逾時停止前要先放開） */
+function stepLines(s: Step, settings: Settings, held: string[]): string[] {
   switch (s.type) {
     case 'tap':
       if (s.holdMs && s.holdMs > 0) {
@@ -152,6 +159,12 @@ function stepLines(s: Step, settings: Settings): string[] {
         : [`Turn(${turnCounts(s.degrees, settings)}, ${s.parts}, ${Math.round(s.partDelayMs)})  ; ${s.degrees}°`]
     case 'moveTo':
       return [`MouseMove(${s.x}, ${s.y}, 0)`]
+    case 'waitColor': {
+      const call = `WaitColor(${s.x}, ${s.y}, 0x${s.color.slice(1).toUpperCase()}, ${s.tolerance}, ${Math.round(s.timeoutMs)})`
+      if (!s.stopOnTimeout) return [call]
+      if (held.length === 0) return [`if !${call}`, '    return']
+      return [`if !${call} {`, ...held.map((k) => `    Send("{${sendKey(k)} up}")`), '    return', '}']
+    }
     case 'block': {
       const v = s.on ? 'true' : 'false'
       const lines: string[] = []
@@ -328,6 +341,20 @@ RestoreHeld(keys) {
     }
 }
 
+; 等螢幕上 (x, y) 變成指定顏色：等到回傳 true，超過 timeoutMs 回傳 false
+WaitColor(x, y, color, variation, timeoutMs) {
+    start := A_TickCount
+    Loop {
+        try {
+            if PixelSearch(&fx, &fy, x, y, x, y, color, variation)
+                return true
+        }
+        if (A_TickCount - start >= timeoutMs)
+            return false
+        Sleep(1)
+    }
+}
+
 ToggleMacros(*) {
     global MacrosEnabled
     MacrosEnabled := !MacrosEnabled
@@ -350,6 +377,7 @@ export function generate(macros: Macro[], settings: Settings): GenerateResult {
     '#SingleInstance Force',
     'SendMode("Input")',
     'CoordMode("Mouse", "Screen")',
+    'CoordMode("Pixel", "Screen")',
     'A_MaxHotkeysPerInterval := 2000',
     'DllCall("winmm\\timeBeginPeriod", "UInt", 1)',
     '',
@@ -402,8 +430,15 @@ export function generate(macros: Macro[], settings: Settings): GenerateResult {
     const blocks = m.steps.some((s) => s.type === 'block')
     const indent = blocks ? '        ' : '    '
     if (blocks) out.push('    try {')
+    const held: string[] = []
     for (const s of m.steps) {
-      for (const line of stepLines(s, settings)) out.push(`${indent}${line}`)
+      for (const line of stepLines(s, settings, held)) out.push(`${indent}${line}`)
+      if (s.type === 'down' || s.type === 'up') {
+        const k = normalizeKey(s.key) ?? s.key
+        const at = held.indexOf(k)
+        if (s.type === 'down' && at < 0) held.push(k)
+        if (s.type === 'up' && at >= 0) held.splice(at, 1)
+      }
     }
     if (blocks) out.push('    } finally {', '        UnblockAll()', '    }')
     out.push('}', '')

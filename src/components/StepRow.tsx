@@ -1,7 +1,8 @@
-import type { HTMLAttributes, ReactNode } from 'react'
+import { useEffect, useRef, useState, type HTMLAttributes, type ReactNode } from 'react'
 import type { BlockTarget, Settings, Step } from '../lib/types'
 import { KeyCapture } from './KeyCapture'
 import { Icon } from './ui'
+import { cancelPick, pickPixel, type PickedPixel } from '../lib/native'
 
 export const STEP_LABELS: Record<Step['type'], string> = {
   tap: '按一下',
@@ -11,6 +12,7 @@ export const STEP_LABELS: Record<Step['type'], string> = {
   turn: '轉視角',
   moveTo: '滑鼠移到',
   block: '封鎖輸入',
+  waitColor: '等顏色',
 }
 
 const FRAME_MS = 1000 / 60
@@ -41,6 +43,53 @@ function NumberField({ value, onChange, step = 1, min, width = 70 }: {
       style={{ width: `${width / 14}rem` }}
       onChange={(e) => onChange(e.target.value === '' ? NaN : Number(e.target.value))}
     />
+  )
+}
+
+/** 取色／取位置：切到遊戲，滑鼠移到要的地方按 F8 */
+function PickButton({ label, onPicked }: { label: string; onPicked: (p: PickedPixel) => void }) {
+  const [waiting, setWaiting] = useState(false)
+  const [error, setError] = useState('')
+  // 取色要等使用者操作，完成時用最新的 onPicked，才不會蓋掉期間的其他修改
+  const latest = useRef(onPicked)
+  const waitingRef = useRef(false)
+  useEffect(() => {
+    latest.current = onPicked
+  }, [onPicked])
+  useEffect(() => () => {
+    if (waitingRef.current) cancelPick()
+  }, [])
+
+  const click = () => {
+    if (waiting) {
+      cancelPick()
+      return
+    }
+    setError('')
+    setWaiting(true)
+    waitingRef.current = true
+    pickPixel()
+      .then((p) => p && latest.current(p))
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => {
+        waitingRef.current = false
+        setWaiting(false)
+      })
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        className={`pick-btn ${waiting ? 'picking' : ''}`}
+        onClick={click}
+        title={waiting ? '再按一次取消' : '切到遊戲，滑鼠移到要的地方按 F8（Esc 取消）'}
+      >
+        <Icon name="pipette" size={14} />
+        {waiting ? '到遊戲按 F8…' : label}
+      </button>
+      {error && <span className="pick-error">{error}</span>}
+    </>
   )
 }
 
@@ -105,9 +154,39 @@ export function StepRow({ step, index, total, hasError, onChange, onMove, onDupl
         </>
       )
       break
+    case 'waitColor':
+      body = (
+        <>
+          <PickButton label="取色" onPicked={(p) => onChange({ ...step, x: p.x, y: p.y, color: p.color })} />
+          <span className="unit">X</span>
+          <NumberField value={step.x} width={60} onChange={(x) => onChange({ ...step, x })} />
+          <span className="unit">Y</span>
+          <NumberField value={step.y} width={60} onChange={(y) => onChange({ ...step, y })} />
+          <label className="color-chip" title="點一下可以手動選顏色">
+            <input
+              type="color"
+              value={/^#[0-9a-f]{6}$/i.test(step.color) ? step.color.toLowerCase() : '#ffffff'}
+              onChange={(e) => onChange({ ...step, color: e.target.value.toUpperCase() })}
+            />
+            <span className="color-dot" style={{ background: step.color }} />
+            <span className="color-hex">{step.color}</span>
+          </label>
+          <span className="unit">誤差</span>
+          <NumberField value={step.tolerance} min={0} width={50} onChange={(tolerance) => onChange({ ...step, tolerance })} />
+          <span className="unit">最多等</span>
+          <NumberField value={step.timeoutMs} min={1} width={65} onChange={(timeoutMs) => onChange({ ...step, timeoutMs })} />
+          <span className="unit">毫秒</span>
+          <select value={step.stopOnTimeout ? 'stop' : 'go'} onChange={(e) => onChange({ ...step, stopOnTimeout: e.target.value === 'stop' })}>
+            <option value="stop">沒等到就停止</option>
+            <option value="go">沒等到也繼續</option>
+          </select>
+        </>
+      )
+      break
     case 'moveTo':
       body = (
         <>
+          <PickButton label="取位置" onPicked={(p) => onChange({ ...step, x: p.x, y: p.y })} />
           <span className="unit">X</span>
           <NumberField value={step.x} onChange={(x) => onChange({ ...step, x })} />
           <span className="unit">Y</span>

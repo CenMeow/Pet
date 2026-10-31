@@ -111,3 +111,20 @@ export function setWindowTheme(theme: 'dark' | 'light' | null) {
   if (!isTauri) return
   getCurrentWindow().setTheme(theme).catch(() => {})
 }
+
+export interface PickedPixel {
+  x: number
+  y: number
+  /** #RRGGBB */
+  color: string
+}
+
+/** 等使用者在遊戲裡把滑鼠移到要的位置按 F8，回傳位置和顏色；取消（Esc）回傳 null */
+export async function pickPixel(): Promise<PickedPixel | null> {
+  if (!isTauri) throw new Error('預覽模式不能取色')
+  return invoke<PickedPixel | null>('pick_pixel')
+}
+
+export function cancelPick() {
+  if (isTauri) invoke('cancel_pick').catch(() => {})
+}

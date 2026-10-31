@@ -12,6 +12,8 @@ export type Step =
   | { id: string; type: 'moveTo'; x: number; y: number }
   /** 封鎖／解除封鎖你自己的鍵盤或滑鼠輸入，巨集本身送出的按鍵不受影響。巨集結束時一定會自動解除。 */
   | { id: string; type: 'block'; target: BlockTarget; on: boolean }
+  /** 等螢幕上某一點變成指定顏色（例如等表情選單真的打開）。color 是 #RRGGBB，tolerance 是每個顏色通道可差多少（0–255）。 */
+  | { id: string; type: 'waitColor'; x: number; y: number; color: string; tolerance: number; timeoutMs: number; stopOnTimeout: boolean }
 
 export type BlockTarget = 'keyboard' | 'mouse' | 'all'
 
