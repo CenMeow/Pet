@@ -206,12 +206,17 @@ Turn(counts, parts, delayMs) {
     }
 }
 
-; 讀 Roblox 存檔裡的滑鼠靈敏度，讓轉視角角度不受遊戲設定影響
+; 讀 Roblox 存檔裡的靈敏度，讓轉視角角度不受遊戲設定影響。
+; 遊戲設定選單改的是 MouseSensitivityThirdPerson／FirstPerson，舊的 MouseSensitivity 不會跟著變
 RefreshSens(*) {
-    global CurSens, FallbackSens
+    global CurSens, FallbackSens, SensFromRoblox
+    static started := false
+    static pats := ['<Vector2 name="MouseSensitivityThirdPerson">\\s*<X>([\\d.eE+-]+)</X>', '<Vector2 name="MouseSensitivityFirstPerson">\\s*<X>([\\d.eE+-]+)</X>', '<float name="MouseSensitivity">([\\d.eE+-]+)</float>']
     newest := "", newestTime := 0
     try {
         Loop Files EnvGet("LOCALAPPDATA") "\\Roblox\\GlobalBasicSettings_*.xml" {
+            if InStr(A_LoopFileName, "Studio")
+                continue
             t := Integer(A_LoopFileTimeModified)
             if (t > newestTime) {
                 newestTime := t
@@ -223,11 +228,22 @@ RefreshSens(*) {
     if (newest != "") {
         try {
             text := FileRead(newest)
-            if RegExMatch(text, '<float name="MouseSensitivity">([\\d.]+)</float>', &m)
-                val := Float(m[1])
+            for pat in pats {
+                if (RegExMatch(text, pat, &m) && Float(m[1]) > 0) {
+                    val := Float(m[1])
+                    break
+                }
+            }
         }
     }
+    old := CurSens
+    SensFromRoblox := val > 0
     CurSens := val > 0 ? val : FallbackSens
+    if (started && old != CurSens) {
+        ToolTip("轉視角靈敏度：" Format("{:g}", CurSens))
+        SetTimer(() => ToolTip(), -2000)
+    }
+    started := true
 }
 
 TurnDeg(degrees, parts, delayMs) {
@@ -403,10 +419,11 @@ export function generate(macros: Macro[], settings: Settings): GenerateResult {
     `global CountsPer360 := ${settings.countsPer360}`,
     `global FallbackSens := ${settings.sensitivity}`,
     'global CurSens := FallbackSens',
+    'global SensFromRoblox := false',
     ...(settings.autoSensitivity ? ['RefreshSens()', 'SetTimer(RefreshSens, 3000)'] : []),
     ...(needsAdmin ? ['; 讀取實體按鍵狀態需要鍵盤、滑鼠 hook', 'InstallKeybdHook()', 'InstallMouseHook()'] : []),
-    'ToolTip(A_IsAdmin ? "TSB 巨集已載入（系統管理員）" : "TSB 巨集已載入")',
-    'SetTimer(() => ToolTip(), -1500)',
+    'ToolTip((A_IsAdmin ? "TSB 巨集已載入（系統管理員）" : "TSB 巨集已載入") "`n轉視角靈敏度：" Format("{:g}", CurSens) (SensFromRoblox ? "（Roblox 設定）" : "（編輯器設定）"))',
+    'SetTimer(() => ToolTip(), -2500)',
     '',
     `${hotkeyDef(settings.exitHotkey)}::ExitApp()`,
     `${hotkeyDef(settings.toggleHotkey)}::ToggleMacros()`,

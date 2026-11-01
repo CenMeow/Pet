@@ -204,7 +204,11 @@ describe('auto sensitivity', () => {
     const auto = generate([macro({ steps })], { ...defaultSettings, autoSensitivity: true }).script
     expect(auto).toContain('TurnDeg(-60, 1, 0)')
     expect(auto).toContain('"\\Roblox\\GlobalBasicSettings_*.xml"')
-    expect(auto).toContain(`'<float name="MouseSensitivity">([\\d.]+)</float>'`)
+    // 遊戲設定選單改的是第三人稱／第一人稱靈敏度，先讀它們
+    expect(auto).toContain(`'<Vector2 name="MouseSensitivityThirdPerson">\\s*<X>([\\d.eE+-]+)</X>'`)
+    expect(auto.indexOf('MouseSensitivityThirdPerson')).toBeLessThan(auto.indexOf('<float name="MouseSensitivity">'))
+    expect(auto).toContain('if InStr(A_LoopFileName, "Studio")')
+    expect(auto).toContain('global SensFromRoblox := false\r\nRefreshSens()')
     expect(auto).toContain('global FallbackSens := 0.4')
     const manual = generate([macro({ steps })], { ...defaultSettings, autoSensitivity: false }).script
     expect(manual).toContain('Turn(-300, 1, 0)')

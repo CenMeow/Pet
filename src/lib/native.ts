@@ -128,3 +128,15 @@ export async function pickPixel(): Promise<PickedPixel | null> {
 export function cancelPick() {
   if (isTauri) invoke('cancel_pick').catch(() => {})
 }
+
+export interface RobloxSens {
+  value: number
+  /** 設定檔最後存檔時間（Unix 毫秒） */
+  modifiedMs: number
+}
+
+/** Roblox 設定檔裡的轉視角靈敏度；讀不到回傳 null */
+export async function readRobloxSens(): Promise<RobloxSens | null> {
+  if (!isTauri) return null
+  return invoke<RobloxSens | null>('read_roblox_sens')
+}

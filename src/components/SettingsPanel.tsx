@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { Settings } from '../lib/types'
 import { ACCENTS, type Appearance } from '../lib/appearance'
-import { detectAhk, isTauri, openUrl, pickExe } from '../lib/native'
+import { detectAhk, isTauri, openUrl, pickExe, readRobloxSens, type RobloxSens } from '../lib/native'
 import { KeyCapture } from './KeyCapture'
 import { Icon, Segmented, Switch, type IconName } from './ui'
 
@@ -32,10 +32,30 @@ function Row({ label, children }: { label: ReactNode; children: ReactNode }) {
   )
 }
 
+function formatTime(ms: number): string {
+  const d = new Date(ms)
+  const hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  return d.toDateString() === new Date().toDateString() ? hm : `${d.getMonth() + 1}/${d.getDate()} ${hm}`
+}
+
 export function SettingsPanel({ settings, onChange, appearance, onAppearanceChange }: Props) {
   const set = <K extends keyof Settings>(k: K, v: Settings[K]) => onChange({ ...settings, [k]: v })
   const look = <K extends keyof Appearance>(k: K, v: Appearance[K]) => onAppearanceChange({ ...appearance, [k]: v })
   const custom = !ACCENTS.some((a) => a.value.toLowerCase() === appearance.accent.toLowerCase())
+
+  // Roblox 設定檔裡現在的靈敏度（每 3 秒讀一次）
+  const [sens, setSens] = useState<RobloxSens | null | undefined>(undefined)
+  useEffect(() => {
+    if (!isTauri || !settings.autoSensitivity) return
+    let alive = true
+    const read = () => readRobloxSens().then((r) => alive && setSens(r)).catch(() => alive && setSens(null))
+    read()
+    const t = window.setInterval(read, 3000)
+    return () => {
+      alive = false
+      window.clearInterval(t)
+    }
+  }, [settings.autoSensitivity])
 
   // 偵測 AutoHotkey 裝在哪
   const [ahk, setAhk] = useState<{ ok: boolean; text: string } | null>(null)
@@ -105,6 +125,21 @@ export function SettingsPanel({ settings, onChange, appearance, onAppearanceChan
         <Row label="自動讀取 Roblox 靈敏度">
           <Switch checked={settings.autoSensitivity} onChange={(v) => set('autoSensitivity', v)} />
         </Row>
+        {isTauri && settings.autoSensitivity && sens !== undefined && (
+          <Row label="目前讀到">
+            {sens ? (
+              <>
+                <span className="status-chip ok">{Number(sens.value.toFixed(3))}</span>
+                <span className="hint">Roblox 存檔時間 {formatTime(sens.modifiedMs)}</span>
+              </>
+            ) : (
+              <>
+                <span className="status-chip bad">讀不到</span>
+                <span className="hint">會用下面的靈敏度</span>
+              </>
+            )}
+          </Row>
+        )}
         <Row label={<>靈敏度<span className="sub">讀不到時用</span></>}>
           <input type="number" step={0.01} min={0.01} value={settings.sensitivity}
             onChange={(e) => set('sensitivity', Number(e.target.value))} />

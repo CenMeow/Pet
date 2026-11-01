@@ -300,6 +300,64 @@ fn cancel_pick(picker: State<'_, Picker>) {
     picker.0.fetch_add(1, Ordering::SeqCst);
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RobloxSens {
+    value: f64,
+    /// 設定檔最後存檔時間（Unix 毫秒）
+    modified_ms: u64,
+}
+
+/// 最新的 Roblox 設定檔（%LOCALAPPDATA%\Roblox\GlobalBasicSettings_*.xml，不含 Studio 的）
+fn roblox_settings_file() -> Option<PathBuf> {
+    let dir = PathBuf::from(std::env::var_os("LOCALAPPDATA")?).join("Roblox");
+    fs::read_dir(dir)
+        .ok()?
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            let name = e.file_name().to_string_lossy().to_string();
+            name.starts_with("GlobalBasicSettings_") && name.ends_with(".xml") && !name.contains("Studio")
+        })
+        .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
+        .max_by_key(|(t, _)| *t)
+        .map(|(_, p)| p)
+}
+
+/// 遊戲設定選單改的是 MouseSensitivityThirdPerson／FirstPerson（Vector2），舊的 MouseSensitivity 不會跟著變
+fn parse_roblox_sens(text: &str) -> Option<f64> {
+    let positive = |v: &str| v.trim().parse::<f64>().ok().filter(|v| *v > 0.0);
+    for name in ["MouseSensitivityThirdPerson", "MouseSensitivityFirstPerson"] {
+        let tag = format!("<Vector2 name=\"{name}\">");
+        let Some(at) = text.find(&tag) else { continue };
+        let rest = &text[at + tag.len()..];
+        let (Some(a), Some(b), Some(end)) = (rest.find("<X>"), rest.find("</X>"), rest.find("</Vector2>")) else { continue };
+        if a < b && b < end {
+            if let Some(v) = positive(&rest[a + 3..b]) {
+                return Some(v);
+            }
+        }
+    }
+    let tag = "<float name=\"MouseSensitivity\">";
+    let rest = &text[text.find(tag)? + tag.len()..];
+    positive(&rest[..rest.find("</float>")?])
+}
+
+/// 讀 Roblox 設定檔裡的轉視角靈敏度（給設定頁顯示）
+#[tauri::command]
+fn read_roblox_sens() -> Option<RobloxSens> {
+    let path = roblox_settings_file()?;
+    let bytes = fs::read(&path).ok()?;
+    let value = parse_roblox_sens(&String::from_utf8_lossy(&bytes))?;
+    let modified_ms = fs::metadata(&path)
+        .ok()?
+        .modified()
+        .ok()?
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .ok()?
+        .as_millis() as u64;
+    Some(RobloxSens { value, modified_ms })
+}
+
 /// 回傳找到的 AutoHotkey v2 路徑
 #[tauri::command]
 fn detect_ahk(ahk_path: String) -> Result<String, String> {
@@ -338,7 +396,8 @@ pub fn run() {
             detect_ahk,
             open_url,
             pick_pixel,
-            cancel_pick
+            cancel_pick,
+            read_roblox_sens
         ])
         .build(tauri::generate_context!())
         .expect("啟動應用程式失敗");
@@ -352,4 +411,31 @@ pub fn run() {
             kill_child(&handle.state::<Runner>());
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_roblox_sens;
+
+    #[test]
+    fn reads_third_person_sensitivity_first() {
+        let xml = r#"<Item class="UserGameSettings"><Properties>
+            <float name="MouseSensitivity">0.400000006</float>
+            <Vector2 name="MouseSensitivityFirstPerson">
+                <X>0.25</X>
+                <Y>0.25</Y>
+            </Vector2>
+            <Vector2 name="MouseSensitivityThirdPerson">
+                <X>0.100000001</X>
+                <Y>0.100000001</Y>
+            </Vector2>
+        </Properties></Item>"#;
+        assert!((parse_roblox_sens(xml).unwrap() - 0.1).abs() < 1e-6);
+    }
+
+    #[test]
+    fn falls_back_to_old_field() {
+        assert_eq!(parse_roblox_sens(r#"<float name="MouseSensitivity">0.5</float>"#), Some(0.5));
+        assert_eq!(parse_roblox_sens("<roblox></roblox>"), None);
+    }
 }
