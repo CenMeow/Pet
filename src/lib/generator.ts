@@ -28,6 +28,7 @@ export function estimateDuration(steps: Step[]): number {
     if (s.type === 'wait') ms += Math.max(0, s.ms)
     if (s.type === 'tap' && s.holdMs) ms += Math.max(0, s.holdMs)
     if (s.type === 'turn') ms += Math.max(0, s.parts - 1) * Math.max(0, s.partDelayMs)
+    if (s.type === 'tab') ms += Math.max(0, s.holdMs)
   }
   return ms
 }
@@ -118,6 +119,10 @@ export function validate(macros: Macro[], settings: Settings): Problem[] {
         case 'moveTo':
           if (!Number.isInteger(s.x) || !Number.isInteger(s.y)) problems.push({ level: 'error', ...at, message: `「${name}」的滑鼠座標要是整數` })
           break
+        case 'tab':
+          if (s.target !== 'title' && s.target !== 'minimize') problems.push({ level: 'error', ...at, message: `「${name}」的 Tab 位置不正確` })
+          if (!isFiniteNumber(s.holdMs) || s.holdMs < 0) problems.push({ level: 'error', ...at, message: `「${name}」的 Tab 按住時間必須是 0 以上的數字` })
+          break
         case 'waitColor':
           if (!Number.isInteger(s.x) || !Number.isInteger(s.y)) problems.push({ level: 'error', ...at, message: `「${name}」的取色座標要是整數` })
           if (!/^#[0-9a-f]{6}$/i.test(s.color)) problems.push({ level: 'error', ...at, message: `「${name}」的顏色不正確` })
@@ -159,6 +164,8 @@ function stepLines(s: Step, settings: Settings, held: string[]): string[] {
         : [`Turn(${turnCounts(s.degrees, settings)}, ${s.parts}, ${Math.round(s.partDelayMs)})  ; ${s.degrees}°`]
     case 'moveTo':
       return [`MouseMove(${s.x}, ${s.y}, 0)`]
+    case 'tab':
+      return [`TabWindow("${s.target}", ${Math.round(s.holdMs)})`]
     case 'waitColor': {
       const call = `WaitColor(${s.x}, ${s.y}, 0x${s.color.slice(1).toUpperCase()}, ${s.tolerance}, ${Math.round(s.timeoutMs)})`
       if (!s.stopOnTimeout) return [call]
@@ -354,6 +361,50 @@ RestoreHeld(keys) {
             Send("{" k " down}")
         else if (GetKeyState(k))
             Send("{" k " up}")
+    }
+}
+
+; Tab：按住 Roblox 視窗正上方的標題列（左鍵）或右上的最小化鈕（右鍵）holdMs 毫秒。
+; 全螢幕沒有標題列，會先按 F11 退出
+TabWindow(target, holdMs) {
+    hwnd := WinActive("ahk_exe ${ROBLOX_EXE}")
+    if !hwnd
+        hwnd := WinExist("ahk_exe ${ROBLOX_EXE}")
+    if !hwnd
+        return
+    if !(WinGetStyle(hwnd) & 0xC00000) {
+        Send("{F11}")
+        start := A_TickCount
+        while (!(WinGetStyle(hwnd) & 0xC00000) && A_TickCount - start < 2000)
+            Sleep(10)
+        Sleep(150)
+    }
+    WinGetPos(&wx, &wy, &ww, &wh, hwnd)
+    WinGetClientPos(&cx, &cy, &cw, &ch, hwnd)
+    dpi := 0
+    try dpi := DllCall("GetDpiForWindow", "Ptr", hwnd, "UInt")
+    if (dpi <= 0)
+        dpi := A_ScreenDPI
+    ; 標題列在視窗頂端到內容區之間，取中間
+    y := (cy - wy >= 8) ? Round((wy + cy) / 2) : wy + Round(15 * dpi / 96)
+    if (target = "minimize") {
+        ; 右上三顆按鈕各約 46 px，最小化是右邊數來第三顆
+        x := cx + cw - Round(46 * dpi / 96 * 2.5)
+        btn := "RButton"
+    } else {
+        x := wx + ww // 2
+        btn := "LButton"
+    }
+    DllCall("ClipCursor", "Ptr", 0)
+    DllCall("SetCursorPos", "Int", x, "Int", y)
+    Send("{" btn " down}")
+    PreciseSleep(holdMs)
+    Send("{" btn " up}")
+    ; 右鍵放開後如果跳出視窗選單，把它關掉
+    if (btn = "RButton") {
+        Sleep(30)
+        if WinExist("ahk_class #32768")
+            Send("{Esc}")
     }
 }
 

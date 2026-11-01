@@ -30,12 +30,14 @@ function blankStep(type: StepType): Step {
       return { id, type, x: 960, y: 540 }
     case 'block':
       return { id, type, target: 'all', on: true }
+    case 'tab':
+      return { id, type, target: 'title', holdMs: 800 }
     case 'waitColor':
       return { id, type, x: 960, y: 540, color: '#FFFFFF', tolerance: 20, timeoutMs: 1000, stopOnTimeout: true }
   }
 }
 
-const ADDABLE: StepType[] = ['tap', 'down', 'up', 'wait', 'waitColor', 'turn', 'moveTo', 'block']
+const ADDABLE: StepType[] = ['tap', 'down', 'up', 'wait', 'waitColor', 'turn', 'moveTo', 'tab', 'block']
 
 export function MacroEditor({ macro, settings, problems, onChange, onDuplicate, onDelete }: Props) {
   // 用 pointer 事件自己做拖曳，不靠 HTML5 drag & drop（桌面版的 WebView2 會攔截它）

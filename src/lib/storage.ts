@@ -34,6 +34,8 @@ function parseStep(raw: unknown): Step | null {
     }
     case 'moveTo':
       return { id, type: 'moveTo', x: Math.round(num(r.x, 0)), y: Math.round(num(r.y, 0)) }
+    case 'tab':
+      return { id, type: 'tab', target: r.target === 'minimize' ? 'minimize' : 'title', holdMs: Math.max(0, num(r.holdMs, 800)) }
     case 'waitColor':
       return {
         id,
@@ -101,7 +103,7 @@ export function serializeLibrary(settings: Settings, macros: Macro[]): string {
 
 export function starterLibrary(): Library {
   const pick = ['backdash-cancel', 'emote-backdash-rachan', 'twist-v2']
-  const macros = TEMPLATES.filter((t) => pick.includes(t.key)).map(macroFromTemplate)
+  const macros = TEMPLATES.filter((t) => pick.includes(t.key)).map((t) => macroFromTemplate(t))
   return { version: 1, settings: { ...defaultSettings }, macros }
 }
 

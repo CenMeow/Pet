@@ -318,7 +318,7 @@ export default function App() {
       {showTemplates && (
         <TemplatePicker
           onClose={() => setShowTemplates(false)}
-          onPick={(t) => { addMacros([macroFromTemplate(t)]); setShowTemplates(false) }}
+          onPick={(t, choices) => { addMacros([macroFromTemplate(t, choices)]); setShowTemplates(false) }}
         />
       )}
     </div>

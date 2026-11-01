@@ -39,6 +39,7 @@
   --c-moveTo: #f5a54a;
   --c-block: #ff6b8a;
   --c-waitColor: #e8c547;
+  --c-tab: #3cc8d8;
   color-scheme: dark;
 }
 :root[data-theme="light"] {
@@ -65,6 +66,7 @@
   --c-moveTo: #c47518;
   --c-block: #d6365c;
   --c-waitColor: #a8860b;
+  --c-tab: #0e8796;
   color-scheme: light;
 }
 
@@ -295,6 +297,7 @@ button.update:hover:not(:disabled) { background: color-mix(in srgb, var(--accent
 .type-moveTo { --c: var(--c-moveTo); }
 .type-block { --c: var(--c-block); }
 .type-waitColor { --c: var(--c-waitColor); }
+.type-tab { --c: var(--c-tab); }
 
 /* 取色 */
 .pick-btn { height: 1.85rem; padding: 0 .6rem; gap: .35rem; font-size: .85rem; color: var(--c, var(--accent)); }
@@ -417,16 +420,23 @@ body:has(.step-row.dragging) { cursor: grabbing; user-select: none; }
 }
 .modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: .9rem; }
 .modal-head h2 { margin: 0; font-size: 1.2rem; }
-.template-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .7rem; }
+.template-group + .template-group { margin-top: 1.1rem; }
+.template-group h3 { margin: 0 0 .5rem; color: var(--muted); font-size: .8rem; font-weight: 700; letter-spacing: .06em; }
+.template-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: .7rem; }
 .template-card {
-  display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: .45rem;
-  height: auto; padding: .9rem 1rem; text-align: left; white-space: normal;
-  background: var(--panel-2); border-radius: var(--radius-lg);
+  display: flex; flex-direction: column; gap: .5rem; padding: .9rem 1rem;
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  transition: border-color .12s, box-shadow .12s;
 }
-.template-card:hover:not(:disabled) { border-color: var(--accent); background: var(--panel-2); transform: translateY(-2px); box-shadow: var(--shadow); }
+.template-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow); }
 .template-card strong { font-size: 1rem; }
-.template-desc { color: var(--muted); font-size: .85rem; line-height: 1.5; flex: 1; }
+.template-desc { color: var(--muted); font-size: .85rem; line-height: 1.5; }
+.template-foot { display: flex; align-items: center; gap: .5rem; margin-top: auto; padding-top: .2rem; }
+.template-foot .primary { height: 1.85rem; padding: 0 .75rem; font-size: .88rem; }
 .template-hotkey { display: flex; align-items: center; gap: .4rem; color: var(--faint); font-size: .8rem; }
+.segmented.sm { align-self: flex-start; padding: 2px; }
+.segmented.sm button { height: 1.6rem; padding: 0 .6rem; font-size: .82rem; }
+.template-card .segmented { background: var(--panel); }
 
 /* ───────── 提示 ───────── */
 .toast {

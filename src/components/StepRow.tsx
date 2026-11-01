@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type HTMLAttributes, type ReactNode } from 'react'
-import type { BlockTarget, Settings, Step } from '../lib/types'
+import type { BlockTarget, Settings, Step, TabTarget } from '../lib/types'
 import { KeyCapture } from './KeyCapture'
 import { Icon } from './ui'
 import { cancelPick, pickPixel, type PickedPixel } from '../lib/native'
@@ -13,6 +13,7 @@ export const STEP_LABELS: Record<Step['type'], string> = {
   moveTo: '滑鼠移到',
   block: '封鎖輸入',
   waitColor: '等顏色',
+  tab: 'Tab',
 }
 
 const FRAME_MS = 1000 / 60
@@ -151,6 +152,20 @@ export function StepRow({ step, index, total, hasError, onChange, onMove, onDupl
             <option value="keyboard">鍵盤</option>
             <option value="mouse">滑鼠</option>
           </select>
+        </>
+      )
+      break
+    case 'tab':
+      body = (
+        <>
+          <select value={step.target} onChange={(e) => onChange({ ...step, target: e.target.value as TabTarget })}>
+            <option value="title">正上・左鍵按標題列</option>
+            <option value="minimize">右上・右鍵按最小化</option>
+          </select>
+          <span className="unit">按住</span>
+          <NumberField value={step.holdMs} min={0} onChange={(holdMs) => onChange({ ...step, holdMs })} />
+          <span className="unit">毫秒</span>
+          <span className="hint" title="Roblox 是全螢幕時會先按 F11 退出">全螢幕會自動 F11</span>
         </>
       )
       break

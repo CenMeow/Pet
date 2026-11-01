@@ -121,6 +121,8 @@ function parseBody(lines: string[], settings: Settings, warn: (m: string) => voi
       })
       // 逾時時的處理（放開按鍵、return）是編輯器自動產生的，跳過
       if (m[7]) i = takeBlock(lines, i).end
+    } else if ((m = /^TabWindow\(\s*["'](title|minimize)["']\s*,\s*([\d.]+)\s*\)$/i.exec(l))) {
+      steps.push({ id: newId(), type: 'tab', target: m[1].toLowerCase() === 'minimize' ? 'minimize' : 'title', holdMs: Number(m[2]) })
     } else if ((m = /^Send(?:Input|Event|Play)?\s*\(?\s*(["'])(.*)\1\s*\)?$/i.exec(l))) {
       steps.push(...sendSteps(m[2], warn))
     } else if ((m = /^Send(?:Input|Event|Play)?\s*,?\s+([^"'(].*)$/i.exec(l))) {
