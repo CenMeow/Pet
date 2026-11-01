@@ -338,6 +338,7 @@ describe('tab step', () => {
     expect(script).toContain('TabWindow(target, holdMs) {')
     expect(script).toContain('Send("{F11}")')
     expect(script).toContain('hwnd := WinActive("ahk_exe RobloxPlayerBeta.exe")')
+    expect(script).toContain('DllCall("SetCursorPos", "Int", cx + cw // 2, "Int", cy + ch // 2)\n}')
     expect(estimateDuration([tab('title', 800)])).toBe(800)
   })
 

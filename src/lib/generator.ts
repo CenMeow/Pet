@@ -400,12 +400,18 @@ TabWindow(target, holdMs) {
     Send("{" btn " down}")
     PreciseSleep(holdMs)
     Send("{" btn " up}")
-    ; 右鍵放開後如果跳出視窗選單，把它關掉
     if (btn = "RButton") {
+        ; 右鍵放開後如果跳出視窗選單，把它關掉
         Sleep(30)
         if WinExist("ahk_class #32768")
             Send("{Esc}")
+    } else {
+        ; 等標題列確定放開，移游標才不會拖到視窗
+        PreciseSleep(15)
     }
+    ; 游標回到遊戲畫面正中間
+    try WinGetClientPos(&cx, &cy, &cw, &ch, hwnd)
+    DllCall("SetCursorPos", "Int", cx + cw // 2, "Int", cy + ch // 2)
 }
 
 ; 等螢幕上 (x, y) 變成指定顏色：等到回傳 true，超過 timeoutMs 回傳 false

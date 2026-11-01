@@ -165,7 +165,7 @@ export function StepRow({ step, index, total, hasError, onChange, onMove, onDupl
           <span className="unit">按住</span>
           <NumberField value={step.holdMs} min={0} onChange={(holdMs) => onChange({ ...step, holdMs })} />
           <span className="unit">毫秒</span>
-          <span className="hint" title="Roblox 是全螢幕時會先按 F11 退出">全螢幕會自動 F11</span>
+          <span className="hint" title="Roblox 是全螢幕時會先按 F11 退出，按完游標回到畫面正中間">全螢幕會自動 F11</span>
         </>
       )
       break
