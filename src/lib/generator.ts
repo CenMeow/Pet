@@ -33,6 +33,12 @@ export function estimateDuration(steps: Step[]): number {
   return ms
 }
 
+/** 巨集跑的時候暫停背景檢查多久：最多 1.2 秒，heartbeat 才不會太久沒更新讓編輯器以為腳本停了 */
+function pauseMs(steps: Step[]): number {
+  const waits = steps.reduce((t, s) => t + (s.type === 'waitColor' ? Math.max(0, s.timeoutMs) : 0), 0)
+  return Math.min(1200, Math.round(estimateDuration(steps) + waits + 300))
+}
+
 /** 按鍵放進 AHK 字串時的寫法（反引號是 AHK 的跳脫字元） */
 function sendKey(key: string): string {
   const k = normalizeKey(key) as string
@@ -216,8 +222,10 @@ Turn(counts, parts, delayMs) {
 ; 讀 Roblox 存檔裡的靈敏度，讓轉視角角度不受遊戲設定影響。
 ; 遊戲設定選單改的是 MouseSensitivityThirdPerson／FirstPerson，舊的 MouseSensitivity 不會跟著變
 RefreshSens(*) {
-    global CurSens, FallbackSens, SensFromRoblox
+    global CurSens, FallbackSens, SensFromRoblox, ChecksPausedUntil
     static started := false
+    if (A_TickCount < ChecksPausedUntil)
+        return
     static pats := ['<Vector2 name="MouseSensitivityThirdPerson">\\s*<X>([\\d.eE+-]+)</X>', '<Vector2 name="MouseSensitivityFirstPerson">\\s*<X>([\\d.eE+-]+)</X>', '<float name="MouseSensitivity">([\\d.eE+-]+)</float>']
     newest := "", newestTime := 0
     try {
@@ -260,12 +268,21 @@ TurnDeg(degrees, parts, delayMs) {
 
 WatchEditor() {
     static beats := 0
+    global ChecksPausedUntil
+    if (A_TickCount < ChecksPausedUntil)
+        return
     if FileExist(A_ScriptDir "\\stop.flag")
         ExitApp()
     beats += 1
     if (Mod(beats, 3) = 1) {
         try FileOpen(A_ScriptDir "\\heartbeat", "w").Write(A_TickCount)
     }
+}
+
+; 巨集跑的時候先暫停背景檢查（看停止檔案、讀靈敏度），免得插進巨集中間讓等待變長
+PauseChecks(ms) {
+    global ChecksPausedUntil
+    ChecksPausedUntil := A_TickCount + ms
 }
 
 ; 系統管理員模式下用 Windows 的 BlockInput 擋住全部實體輸入（包含 Shift 和滑鼠轉鏡頭）
@@ -472,6 +489,7 @@ export function generate(macros: Macro[], settings: Settings): GenerateResult {
         ]
       : []),
     '; 編輯器透過 stop.flag 要求停止，透過 heartbeat 判斷是否執行中（系統管理員模式下編輯器無法直接關閉腳本）',
+    'global ChecksPausedUntil := 0',
     'SetTimer(WatchEditor, 300)',
     `global CountsPer360 := ${settings.countsPer360}`,
     `global FallbackSens := ${settings.sensitivity}`,
@@ -500,7 +518,7 @@ export function generate(macros: Macro[], settings: Settings): GenerateResult {
   enabled.forEach((m, i) => {
     out.push(`; ${cleanComment(m.name)}`)
     if (m.note) out.push(`; ${cleanComment(m.note)}`)
-    out.push(`Macro${i + 1}(*) {`)
+    out.push(`Macro${i + 1}(*) {`, `    PauseChecks(${pauseMs(m.steps)})`)
     const blocks = m.steps.some((s) => s.type === 'block')
     const indent = blocks ? '        ' : '    '
     if (blocks) out.push('    try {')

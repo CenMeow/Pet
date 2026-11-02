@@ -9,7 +9,7 @@ export interface AhkImport {
 }
 
 const SKIP_CALLS = /^(ExitApp|ToggleMacros|Reload|Suspend|Pause)\b/i
-const IGNORABLE = /^(\{|\}|return\b|global\b|static\b|local\b|if\s*\(?\s*!?\s*\w+\.Value|#|try\b|finally\b|else\b)/i
+const IGNORABLE = /^(\{|\}|return\b|global\b|static\b|local\b|if\s*\(?\s*!?\s*\w+\.Value|#|try\b|finally\b|else\b|PauseChecks\()/i
 
 function stripComment(line: string): string {
   // 去掉 ; 註解（引號內的不算）

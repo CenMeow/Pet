@@ -14,6 +14,7 @@ function testHotkey(i: number): string {
   return `${['', '^', '+', '!'][Math.floor(i / 20)]}F${(i % 20) + 3}`
 }
 import { parseLibraryJson, serializeLibrary } from './storage'
+import { parseAhk } from './ahkImport'
 import { defaultSettings, type Macro } from './types'
 
 const RACHAN = `[jumpemote]
@@ -175,6 +176,28 @@ describe('hold duration', () => {
   })
 })
 
+describe('background checks', () => {
+  it('pause while a macro runs so timers do not stretch its waits', () => {
+    const { script, problems } = generate([
+      macro({ steps: [{ id: 'a', type: 'tap', key: 's', holdMs: 60 }, { id: 'b', type: 'wait', ms: 30 }] }),
+      macro({ id: 'm2', name: '長', hotkey: 'F4', steps: [
+        { id: 'c', type: 'wait', ms: 500 },
+        { id: 'd', type: 'waitColor', x: 1, y: 2, color: '#FFFFFF', tolerance: 10, timeoutMs: 1000, stopOnTimeout: true },
+      ] }),
+    ], defaultSettings)
+    expect(problems.filter((p) => p.level === 'error')).toEqual([])
+    expect(script).toContain('Macro1(*) {\r\n    PauseChecks(390)\r\n')
+    expect(script).toContain('Macro2(*) {\r\n    PauseChecks(1200)\r\n')
+    expect(script).toContain('global ChecksPausedUntil := 0\r\nSetTimer(WatchEditor, 300)')
+    expect(script).toContain('WatchEditor() {\n    static beats := 0\n    global ChecksPausedUntil\n    if (A_TickCount < ChecksPausedUntil)\n        return')
+    expect(script).toContain('    static started := false\n    if (A_TickCount < ChecksPausedUntil)\n        return')
+    expect(script).toContain('PauseChecks(ms) {\n    global ChecksPausedUntil\n    ChecksPausedUntil := A_TickCount + ms\n}')
+    const back = parseAhk(script, defaultSettings)
+    expect(back.warnings).toEqual([])
+    expect(back.macros[0].steps.map((s) => s.type)).toEqual(['down', 'wait', 'up', 'wait'])
+  })
+})
+
 describe('block input', () => {
   it('wraps macros with block steps in try/finally', () => {
     const { script, problems } = generate([macro({ steps: [
@@ -183,7 +206,7 @@ describe('block input', () => {
       { id: 'b2', type: 'block', target: 'keyboard', on: false },
     ] })], defaultSettings)
     expect(problems).toEqual([])
-    expect(script).toContain('    try {\r\n        BlockAll(true)\r\n        Send("{q}")\r\n        BlockKeyboard(false)\r\n    } finally {\r\n        UnblockAll()\r\n    }')
+    expect(script).toContain('Macro1(*) {\r\n    PauseChecks(300)\r\n    try {\r\n        BlockAll(true)\r\n        Send("{q}")\r\n        BlockKeyboard(false)\r\n    } finally {\r\n        UnblockAll()\r\n    }')
     const parsed = parseLibraryJson(serializeLibrary(defaultSettings, [macro({ steps: [{ id: 'b', type: 'block', target: 'mouse', on: false }] })]))
     expect(parsed.macros[0].steps[0]).toMatchObject({ type: 'block', target: 'mouse', on: false })
   })
@@ -196,7 +219,7 @@ describe('block input', () => {
   })
   it('leaves macros without block steps unwrapped', () => {
     const { script } = generate([macro({ steps: [{ id: 't', type: 'tap', key: 'q' }] })], defaultSettings)
-    expect(script).not.toContain('Macro1(*) {\r\n    try {')
+    expect(script).toContain('Macro1(*) {\r\n    PauseChecks(300)\r\n    Send("{q}")\r\n}')
     expect(script).not.toContain('*RunAs')
   })
 })
