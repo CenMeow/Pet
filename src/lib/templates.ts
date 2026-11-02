@@ -187,16 +187,16 @@ export const TEMPLATES: Template[] = [
   {
     key: 'emote-backdash-auto',
     group: 'Emote',
-    name: 'Emote backdash（自動點 Drum Major）',
+    name: 'Emote backdash（Jaharia）',
     hotkey: 'c',
-    description: '解除 shift、自動點 Drum Major、後閃、跳',
+    description: '解除 shift、點表情、後閃、左鍵。表情位置用「取位置」改',
+    // 照 Jaharia EmoteBC 的時間：B 後等 40 再點、點完等 20 才按 S、放開 S 等 20 才左鍵
     steps: [
       ['tap', 'Shift'], ['wait', 20],
       ['moveTo', 957, 700], ['moveTo', 955, 701], ['moveTo', 957, 701], ['wait', 10],
-      ['tap', 'b'], ['down', 'LButton'], ['wait', 10], ['up', 'LButton'],
-      ['down', 's'], ['wait', 10], ['tap', 'q'], ['wait', 40], ['up', 's'],
-      ['tap', 'LButton'], ['wait', 30], ['tap', 'Space', 30],
-      ['wait', 20], ['tap', 'Shift'],
+      ['tap', 'b'], ['wait', 40], ['tap', 'LButton'], ['wait', 20],
+      ['down', 's'], ['wait', 10], ['tap', 'q'], ['up', 's'], ['wait', 20],
+      ['tap', 'LButton'], ['wait', 80], ['tap', 'Shift'],
     ],
   },
   {

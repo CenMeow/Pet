@@ -166,13 +166,15 @@ describe('hold duration', () => {
     expect(parsed.macros[0].steps[0]).toMatchObject({ type: 'tap', key: 's', holdMs: 80 })
   })
 
-  it('auto emote template unlocks shift lock and clicks Drum Major', () => {
+  it('Jaharia emote template unlocks shift lock, waits for the menu and spaces out its inputs', () => {
     const t = TEMPLATES.find((x) => x.key === 'emote-backdash-auto')!
     const { script, problems } = generate([macroFromTemplate(t)], defaultSettings)
     expect(problems).toEqual([])
     const body = script.slice(script.indexOf('Macro1(*) {'))
     expect(body.indexOf('Send("{Shift}")')).toBeLessThan(body.indexOf('MouseMove(957, 700, 0)'))
     expect(body.indexOf('MouseMove(957, 700, 0)')).toBeLessThan(body.indexOf('Send("{b}")'))
+    expect(body).toContain('Send("{b}")\r\n    PreciseSleep(40)\r\n    Send("{LButton}")\r\n    PreciseSleep(20)\r\n    Send("{s down}")')
+    expect(body).toContain('Send("{s up}")\r\n    PreciseSleep(20)\r\n    Send("{LButton}")\r\n    PreciseSleep(80)\r\n    Send("{Shift}")')
   })
 })
 
