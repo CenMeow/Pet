@@ -447,6 +447,7 @@ body:has(.step-row.dragging) { cursor: grabbing; user-select: none; }
   animation: toast-in .22s var(--ease);
 }
 .toast .icon { margin-top: .05rem; }
+.toast span { white-space: pre-line; overflow-wrap: anywhere; max-height: 50vh; overflow: auto; }
 .toast.info .icon { color: var(--ok); }
 .toast.error { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
 .toast.error .icon { color: var(--danger); }

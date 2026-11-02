@@ -62,7 +62,9 @@ export default function App() {
 
   useEffect(() => {
     if (!toast) return
-    const t = window.setTimeout(() => setToast(null), toast.kind === 'error' ? 7000 : 3500)
+    // 長的錯誤訊息（例如 AutoHotkey 回報的錯誤）留久一點，點一下就關
+    const ms = toast.kind === 'error' ? (toast.text.length > 60 ? 30000 : 7000) : 3500
+    const t = window.setTimeout(() => setToast(null), ms)
     return () => window.clearTimeout(t)
   }, [toast])
 

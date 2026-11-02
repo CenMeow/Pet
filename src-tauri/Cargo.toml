@@ -1,6 +1,6 @@
 [package]
 name = "tsb-macro-editor"
-version = "0.2.11"
+version = "0.2.12"
 description = "TSB 巨集編輯器：用步驟卡片製作 AutoHotkey v2 巨集"
 edition = "2021"
 

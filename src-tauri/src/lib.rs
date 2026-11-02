@@ -1,9 +1,10 @@
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command};
+use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime};
+use std::sync::{mpsc, Arc, Mutex};
+use std::time::{Duration, Instant, SystemTime};
 
 use tauri::{Manager, RunEvent, State};
 
@@ -110,18 +111,73 @@ fn kill_child(runner: &Runner) {
     }
 }
 
-#[tauri::command]
-fn run_script(
-    app: tauri::AppHandle,
-    runner: State<'_, Runner>,
-    script: String,
-    ahk_path: String,
-) -> Result<String, String> {
+/// 在背景把整個管線讀完，結果從 channel 拿
+fn read_pipe_async<R: Read + Send + 'static>(pipe: Option<R>) -> mpsc::Receiver<String> {
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        if let Some(mut p) = pipe {
+            let _ = p.read_to_end(&mut buf);
+        }
+        let _ = tx.send(String::from_utf8_lossy(&buf).into_owned());
+    });
+    rx
+}
+
+/// 啟動後等一下：腳本有錯時 AutoHotkey 會馬上結束並印出錯誤。
+/// 回傳 Some(child) 表示還在跑；None 表示正常結束（例如以系統管理員身分重新啟動了自己）
+fn launch_and_watch(mut cmd: Command, wait: Duration) -> Result<Option<Child>, String> {
+    let mut child = cmd
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("啟動 AutoHotkey 失敗：{e}"))?;
+    let out = read_pipe_async(child.stdout.take());
+    let err = read_pipe_async(child.stderr.take());
+    let start = Instant::now();
+    while start.elapsed() < wait {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let grab = |rx: &mpsc::Receiver<String>| rx.recv_timeout(Duration::from_millis(500)).unwrap_or_default();
+                let text = format!("{}\n{}", grab(&out), grab(&err));
+                let text = text.trim();
+                if status.success() && text.is_empty() {
+                    return Ok(None);
+                }
+                return Err(explain_ahk_error(text, status.code()));
+            }
+            Ok(None) => std::thread::sleep(Duration::from_millis(30)),
+            Err(e) => return Err(format!("AutoHotkey 狀態讀取失敗：{e}")),
+        }
+    }
+    Ok(Some(child))
+}
+
+/// 把 AutoHotkey 的錯誤訊息轉成看得懂的話
+fn explain_ahk_error(text: &str, code: Option<i32>) -> String {
+    let lower = text.to_lowercase();
+    if lower.contains("requires autohotkey v2") || lower.contains("#requires") {
+        return "這台電腦的 AutoHotkey 是 v1，巨集要 v2。到「設定 → AutoHotkey」的官網連結安裝 v2.0".into();
+    }
+    if text.is_empty() {
+        let code = code.map(|c| format!("（代碼 {c}）")).unwrap_or_default();
+        return format!("AutoHotkey 一開就結束了{code}，可能被防毒軟體擋掉");
+    }
+    let mut short: String = text.chars().take(300).collect();
+    if text.chars().count() > 300 {
+        short.push('…');
+    }
+    format!("AutoHotkey 回報錯誤：{short}")
+}
+
+fn start_script(app: &tauri::AppHandle, script: &str, ahk_path: &str) -> Result<String, String> {
     if !cfg!(target_os = "windows") {
         return Err("AutoHotkey 只能在 Windows 上執行".into());
     }
-    let ahk = find_ahk(&ahk_path)?;
-    let dir = script_dir(&app)?;
+    let ahk = find_ahk(ahk_path)?;
+    let dir = script_dir(app)?;
+    let runner = app.state::<Runner>();
 
     // 先停掉上一次的（包含系統管理員模式下跑的），再啟動新的
     request_stop(&dir);
@@ -129,14 +185,21 @@ fn run_script(
     let _ = fs::remove_file(dir.join(STOP_FLAG));
 
     let script_path = dir.join(SCRIPT_NAME);
-    write_utf8_bom(&script_path, &script)?;
-    let child = Command::new(&ahk)
-        .arg("/ErrorStdOut")
-        .arg(&script_path)
-        .spawn()
-        .map_err(|e| format!("啟動 AutoHotkey 失敗：{e}"))?;
-    *runner.0.lock().map_err(|_| "內部錯誤")? = Some(child);
+    write_utf8_bom(&script_path, script)?;
+    let mut cmd = Command::new(&ahk);
+    cmd.arg("/ErrorStdOut=UTF-8").arg(&script_path);
+    if let Some(child) = launch_and_watch(cmd, Duration::from_millis(1500))? {
+        *runner.0.lock().map_err(|_| "內部錯誤")? = Some(child);
+    }
     Ok("巨集已啟動，切到 Roblox 就能用".into())
+}
+
+/// 等待期間不能卡住畫面，所以在背景執行緒做
+#[tauri::command]
+async fn run_script(app: tauri::AppHandle, script: String, ahk_path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || start_script(&app, &script, &ahk_path))
+        .await
+        .map_err(|e| format!("內部錯誤：{e}"))?
 }
 
 #[tauri::command]
@@ -415,6 +478,53 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    use super::{explain_ahk_error, launch_and_watch};
+    use std::process::Command;
+    use std::time::Duration;
+
+    fn sh(script: &str) -> Command {
+        let mut c = Command::new("sh");
+        c.arg("-c").arg(script);
+        c
+    }
+
+    #[test]
+    fn reports_v1_autohotkey() {
+        let err = launch_and_watch(sh("echo 'Error: This script requires AutoHotkey v2.0, but you have v1.1.37.02.'; exit 2"), Duration::from_secs(3)).unwrap_err();
+        assert!(err.contains("AutoHotkey 是 v1"), "{err}");
+    }
+
+    #[test]
+    fn reports_script_errors_from_stderr() {
+        let err = launch_and_watch(sh("echo 'Error: Missing \"}\"' >&2; exit 2"), Duration::from_secs(3)).unwrap_err();
+        assert_eq!(err, "AutoHotkey 回報錯誤：Error: Missing \"}\"");
+    }
+
+    #[test]
+    fn silent_crash_mentions_antivirus() {
+        let err = launch_and_watch(sh("exit 3"), Duration::from_secs(3)).unwrap_err();
+        assert_eq!(err, "AutoHotkey 一開就結束了（代碼 3），可能被防毒軟體擋掉");
+    }
+
+    #[test]
+    fn clean_exit_means_relaunched_as_admin() {
+        assert!(launch_and_watch(sh("exit 0"), Duration::from_secs(3)).unwrap().is_none());
+    }
+
+    #[test]
+    fn running_script_is_kept() {
+        let mut child = launch_and_watch(sh("sleep 5"), Duration::from_millis(300)).unwrap().expect("still running");
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+
+    #[test]
+    fn long_errors_are_shortened() {
+        let long = "x".repeat(400);
+        let msg = explain_ahk_error(&long, Some(2));
+        assert!(msg.ends_with('…') && msg.chars().count() < 320);
+    }
+
     use super::parse_roblox_sens;
 
     #[test]
