@@ -7,6 +7,7 @@ import { macroFromTemplate } from './lib/templates'
 import { parseMgp } from './lib/mgp'
 import { parseAhk } from './lib/ahkImport'
 import { loadLibrary, parseLibraryJson, saveLibrary, serializeLibrary } from './lib/storage'
+import { useHistory } from './lib/history'
 import { checkUpdate, installUpdate, isScriptRunning, isTauri, openTextFile, runScript, saveTextFile, setWindowTheme, stopScript } from './lib/native'
 import { applyAppearance, loadAppearance, saveAppearance, type Appearance } from './lib/appearance'
 import type { Update } from '@tauri-apps/plugin-updater'
@@ -21,7 +22,9 @@ type Toast = { kind: 'info' | 'error'; text: string } | null
 export default function App() {
   const initial = useMemo(() => loadLibrary(), [])
   const [settings, setSettings] = useState<Settings>(initial.settings)
-  const [macros, setMacros] = useState<Macro[]>(initial.macros)
+  // 巨集的修改都記在 history 裡，可以復原／重做
+  const macroHistory = useHistory<Macro[]>(initial.macros)
+  const { value: macros, set: setMacros } = macroHistory
   const [selectedId, setSelectedId] = useState<string | null>(initial.macros[0]?.id ?? null)
   const [view, setView] = useState<'macro' | 'settings'>('macro')
   const [showTemplates, setShowTemplates] = useState(false)
@@ -78,9 +81,41 @@ export default function App() {
 
   const { script, problems } = useMemo(() => generate(macros, settings), [macros, settings])
   const errors = problems.filter((p) => p.level === 'error')
-  const selected = macros.find((m) => m.id === selectedId) ?? null
+  // 復原可能讓選中的巨集消失（例如復原「新增」），這時改選第一個
+  const selected = macros.find((m) => m.id === selectedId) ?? macros[0] ?? null
 
-  const updateMacro = useCallback((m: Macro) => setMacros((ms) => ms.map((x) => (x.id === m.id ? m : x))), [])
+  const updateMacro = useCallback((m: Macro) => setMacros((ms) => ms.map((x) => (x.id === m.id ? m : x))), [setMacros])
+
+  // 復原／重做後切到被改到的那個巨集，才看得到改了什麼
+  const travel = (target: Macro[] | undefined, apply: () => void) => {
+    if (!target) return
+    const changed = target.find((m) => !macros.includes(m))
+    if (changed) setSelectedId(changed.id)
+    setView('macro')
+    apply()
+  }
+  const undoMacros = () => travel(macroHistory.undoTarget, macroHistory.undo)
+  const redoMacros = () => travel(macroHistory.redoTarget, macroHistory.redo)
+
+  // Ctrl+Z 復原，Ctrl+Y 或 Ctrl+Shift+Z 重做。只在巨集頁有效：設定頁和新增視窗的輸入框照原本的方式復原；錄觸發鍵時也不會收到
+  const undoKeys = view === 'macro' && !showTemplates
+  useEffect(() => {
+    if (!undoKeys) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || !(e.ctrlKey || e.metaKey) || e.altKey) return
+      // 注音等輸入法開著時 key 可能不是英文字母，改看實體按鍵
+      const k = /^[a-z]$/i.test(e.key) ? e.key.toLowerCase() : e.code === 'KeyZ' ? 'z' : e.code === 'KeyY' ? 'y' : ''
+      if (k === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        undoMacros()
+      } else if (k === 'y' || (k === 'z' && e.shiftKey)) {
+        e.preventDefault()
+        redoMacros()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
 
   const addMacros = (added: Macro[]) => {
     if (added.length === 0) return
@@ -201,6 +236,12 @@ export default function App() {
           ) : '未執行'}
         </div>
         <span className="spacer" />
+        <button type="button" className="ghost icon-only" onClick={undoMacros} disabled={!macroHistory.undoTarget} title="復原（Ctrl+Z）" aria-label="復原">
+          <Icon name="undo" />
+        </button>
+        <button type="button" className="ghost icon-only" onClick={redoMacros} disabled={!macroHistory.redoTarget} title="重做（Ctrl+Y）" aria-label="重做">
+          <Icon name="redo" />
+        </button>
         {update && (
           <button type="button" className="update" onClick={handleUpdate} disabled={updating}>
             <Icon name="sparkle" />{updating ? '更新中…' : `更新到 ${update.version}`}
@@ -245,7 +286,7 @@ export default function App() {
               return (
                 <li
                   key={m.id}
-                  className={`${m.id === selectedId && view === 'macro' ? 'active' : ''} ${m.enabled ? '' : 'disabled'}`}
+                  className={`${m.id === selected?.id && view === 'macro' ? 'active' : ''} ${m.enabled ? '' : 'disabled'}`}
                   onClick={() => { setSelectedId(m.id); setView('macro') }}
                 >
                   <Switch small checked={m.enabled} title="啟用／停用" onChange={(enabled) => updateMacro({ ...m, enabled })} />

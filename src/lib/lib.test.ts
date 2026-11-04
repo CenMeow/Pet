@@ -3,6 +3,7 @@ import { generate, turnCounts, validate, estimateDuration } from './generator'
 import { parseMgp } from './mgp'
 import { normalizeHotkey, normalizeKey, keyFromCode } from './keys'
 import { TEMPLATES, allChoices, macroFromTemplate } from './templates'
+import { LIMIT, MERGE_MS, record, redo, sameContent, startHistory, undo } from './history'
 
 /** 每個範本的每種選項組合都產生一個巨集 */
 function allTemplateMacros(): Macro[] {
@@ -375,5 +376,64 @@ describe('tab step', () => {
     const back = parseAhk(generate([macro({ steps: [tab('minimize', 300), tab('title')] })], defaultSettings).script, defaultSettings)
     expect(back.warnings).toEqual([])
     expect(back.macros[0].steps.map(({ id: _id, ...rest }) => rest)).toEqual([{ type: 'tab', target: 'minimize', holdMs: 300 }, { type: 'tab', target: 'title', holdMs: 800 }])
+  })
+})
+
+describe('undo / redo', () => {
+  it('goes back and forward', () => {
+    let h = startHistory('a')
+    h = record(h, 'b', 1000)
+    h = record(h, 'c', 5000)
+    h = undo(h)
+    expect(h.present).toBe('b')
+    h = undo(h)
+    expect(h.present).toBe('a')
+    expect(undo(h)).toBe(h)
+    h = redo(redo(h))
+    expect(h.present).toBe('c')
+    expect(redo(h)).toBe(h)
+  })
+
+  it('merges quick edits into one step', () => {
+    let h = startHistory('')
+    h = record(h, 'E', 1000)
+    h = record(h, 'Em', 1000 + MERGE_MS - 1)
+    h = record(h, 'Emo', 1000 + 2 * MERGE_MS - 2)
+    expect(h.past).toEqual([''])
+    h = record(h, 'Emo!', 1000 + 4 * MERGE_MS)
+    expect(h.past).toEqual(['', 'Emo'])
+    expect(undo(undo(h)).present).toBe('')
+  })
+
+  it('starts a new step after undo even if quick', () => {
+    let h = record(record(startHistory(1), 2, 1000), 3, 3000)
+    h = undo(h)
+    h = record(h, 4, 3001)
+    expect(h.past).toEqual([1, 2])
+    expect(undo(h).present).toBe(2)
+  })
+
+  it('a new edit clears redo', () => {
+    let h = undo(record(startHistory('a'), 'b', 1000))
+    expect(h.future).toEqual(['b'])
+    h = record(h, 'c', 5000)
+    expect(h.future).toEqual([])
+  })
+
+  it('ignores changes that leave everything the same', () => {
+    const macros = [{ id: 'm1', steps: [{ id: 's1', type: 'wait', ms: 10 }] }]
+    const h = startHistory(macros)
+    expect(record(h, macros.map((m) => m), 1000)).toBe(h)
+    expect(record(h, [{ ...macros[0], steps: [{ ...macros[0].steps[0] }] }], 1000)).toBe(h)
+    expect(record(h, [{ ...macros[0], steps: [{ ...macros[0].steps[0], ms: 20 }] }], 1000).past).toHaveLength(1)
+    expect(sameContent([1, 2], { 0: 1, 1: 2 })).toBe(false)
+    expect(sameContent({ a: 1 }, { a: 1, b: undefined })).toBe(false)
+  })
+
+  it('keeps at most LIMIT steps', () => {
+    let h = startHistory(0)
+    for (let i = 1; i <= LIMIT + 20; i++) h = record(h, i, i * 10_000)
+    expect(h.past).toHaveLength(LIMIT)
+    expect(h.past[0]).toBe(20)
   })
 })
