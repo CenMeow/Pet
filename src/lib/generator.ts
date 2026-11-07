@@ -130,8 +130,12 @@ export function validate(macros: Macro[], settings: Settings): Problem[] {
           if (!isFiniteNumber(s.holdMs) || s.holdMs < 0) problems.push({ level: 'error', ...at, message: `「${name}」的 Tab 按住時間必須是 0 以上的數字` })
           break
         case 'waitColor':
-          if (!Number.isInteger(s.x) || !Number.isInteger(s.y)) problems.push({ level: 'error', ...at, message: `「${name}」的取色座標要是整數` })
-          if (!/^#[0-9a-f]{6}$/i.test(s.color)) problems.push({ level: 'error', ...at, message: `「${name}」的顏色不正確` })
+          if (s.points.length === 0) problems.push({ level: 'error', ...at, message: `「${name}」的等顏色至少要有一個顏色` })
+          s.points.forEach((p, k) => {
+            const which = s.points.length > 1 ? `第 ${k + 1} 個顏色` : ''
+            if (!Number.isInteger(p.x) || !Number.isInteger(p.y)) problems.push({ level: 'error', ...at, message: `「${name}」${which}的取色座標要是整數` })
+            if (!/^#[0-9a-f]{6}$/i.test(p.color)) problems.push({ level: 'error', ...at, message: `「${name}」${which}的顏色不正確` })
+          })
           if (!Number.isInteger(s.tolerance) || s.tolerance < 0 || s.tolerance > 255) problems.push({ level: 'error', ...at, message: `「${name}」的顏色誤差要是 0–255 的整數` })
           if (!isFiniteNumber(s.timeoutMs) || s.timeoutMs <= 0) problems.push({ level: 'error', ...at, message: `「${name}」的最多等待時間必須大於 0` })
           break
@@ -173,7 +177,11 @@ function stepLines(s: Step, settings: Settings, held: string[]): string[] {
     case 'tab':
       return [`TabWindow("${s.target}", ${Math.round(s.holdMs)})`]
     case 'waitColor': {
-      const call = `WaitColor(${s.x}, ${s.y}, 0x${s.color.slice(1).toUpperCase()}, ${s.tolerance}, ${Math.round(s.timeoutMs)})`
+      const hex = (c: string) => `0x${c.slice(1).toUpperCase()}`
+      const [p] = s.points
+      const call = s.points.length === 1
+        ? `WaitColor(${p.x}, ${p.y}, ${hex(p.color)}, ${s.tolerance}, ${Math.round(s.timeoutMs)})`
+        : `WaitAnyColor([${s.points.map((q) => `[${q.x}, ${q.y}, ${hex(q.color)}]`).join(', ')}], ${s.tolerance}, ${Math.round(s.timeoutMs)})`
       if (!s.stopOnTimeout) return [call]
       if (held.length === 0) return [`if !${call}`, '    return']
       return [`if !${call} {`, ...held.map((k) => `    Send("{${sendKey(k)} up}")`), '    return', '}']
@@ -433,11 +441,18 @@ TabWindow(target, holdMs) {
 
 ; 等螢幕上 (x, y) 變成指定顏色：等到回傳 true，超過 timeoutMs 回傳 false
 WaitColor(x, y, color, variation, timeoutMs) {
+    return WaitAnyColor([[x, y, color]], variation, timeoutMs)
+}
+
+; 等好幾個點，任一點變成它的顏色就回傳 true，超過 timeoutMs 回傳 false。points 是 [[x, y, 顏色], ...]
+WaitAnyColor(points, variation, timeoutMs) {
     start := A_TickCount
     Loop {
-        try {
-            if PixelSearch(&fx, &fy, x, y, x, y, color, variation)
-                return true
+        for p in points {
+            try {
+                if PixelSearch(&fx, &fy, p[1], p[2], p[1], p[2], p[3], variation)
+                    return true
+            }
         }
         if (A_TickCount - start >= timeoutMs)
             return false

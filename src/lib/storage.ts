@@ -1,5 +1,5 @@
 // 巨集庫的存取：自動存在本機（localStorage），也可以匯出／匯入 JSON 分享。
-import type { Library, Macro, Settings, Step } from './types'
+import type { ColorPoint, Library, Macro, Settings, Step } from './types'
 import { defaultSettings, newId } from './types'
 import { TEMPLATES, macroFromTemplate } from './templates'
 
@@ -10,6 +10,15 @@ function num(v: unknown, fallback: number): number {
 }
 function str(v: unknown, fallback = ''): string {
   return typeof v === 'string' ? v : fallback
+}
+
+function parsePoint(raw: unknown): ColorPoint {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  return {
+    x: Math.round(num(r.x, 0)),
+    y: Math.round(num(r.y, 0)),
+    color: typeof r.color === 'string' && /^#[0-9a-f]{6}$/i.test(r.color) ? r.color.toUpperCase() : '#FFFFFF',
+  }
 }
 
 function parseStep(raw: unknown): Step | null {
@@ -36,17 +45,18 @@ function parseStep(raw: unknown): Step | null {
       return { id, type: 'moveTo', x: Math.round(num(r.x, 0)), y: Math.round(num(r.y, 0)) }
     case 'tab':
       return { id, type: 'tab', target: r.target === 'minimize' ? 'minimize' : 'title', holdMs: Math.max(0, num(r.holdMs, 800)) }
-    case 'waitColor':
+    case 'waitColor': {
+      // 0.2.13 以前只有一個點，直接存在步驟上（x、y、color）
+      const points = Array.isArray(r.points) && r.points.length > 0 ? r.points.map(parsePoint) : [parsePoint(r)]
       return {
         id,
         type: 'waitColor',
-        x: Math.round(num(r.x, 0)),
-        y: Math.round(num(r.y, 0)),
-        color: typeof r.color === 'string' && /^#[0-9a-f]{6}$/i.test(r.color) ? r.color.toUpperCase() : '#FFFFFF',
+        points,
         tolerance: Math.min(255, Math.max(0, Math.round(num(r.tolerance, 20)))),
         timeoutMs: Math.max(1, num(r.timeoutMs, 1000)),
         stopOnTimeout: r.stopOnTimeout !== false,
       }
+    }
     default:
       return null
   }

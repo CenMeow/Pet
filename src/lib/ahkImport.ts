@@ -112,15 +112,19 @@ function parseBody(lines: string[], settings: Settings, warn: (m: string) => voi
       steps.push({
         id: newId(),
         type: 'waitColor',
-        x: Number(m[2]),
-        y: Number(m[3]),
-        color: `#${m[4].toUpperCase()}`,
+        points: [{ x: Number(m[2]), y: Number(m[3]), color: `#${m[4].toUpperCase()}` }],
         tolerance: Number(m[5]),
         timeoutMs: Number(m[6]),
         stopOnTimeout: Boolean(m[1]),
       })
       // 逾時時的處理（放開按鍵、return）是編輯器自動產生的，跳過
       if (m[7]) i = takeBlock(lines, i).end
+    } else if ((m = /^(if\s*\(?\s*!\s*)?WaitAnyColor\(\s*\[(.*)\]\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)\s*\)?\s*(\{)?$/i.exec(l))) {
+      const points = [...m[2].matchAll(/\[\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*0x([0-9a-f]{6})\s*\]/gi)]
+        .map((p) => ({ x: Number(p[1]), y: Number(p[2]), color: `#${p[3].toUpperCase()}` }))
+      if (points.length === 0) warn(`看不懂等顏色的點：${l}`)
+      else steps.push({ id: newId(), type: 'waitColor', points, tolerance: Number(m[3]), timeoutMs: Number(m[4]), stopOnTimeout: Boolean(m[1]) })
+      if (m[5]) i = takeBlock(lines, i).end
     } else if ((m = /^TabWindow\(\s*["'](title|minimize)["']\s*,\s*([\d.]+)\s*\)$/i.exec(l))) {
       steps.push({ id: newId(), type: 'tab', target: m[1].toLowerCase() === 'minimize' ? 'minimize' : 'title', holdMs: Number(m[2]) })
     } else if ((m = /^Send(?:Input|Event|Play)?\s*\(?\s*(["'])(.*)\1\s*\)?$/i.exec(l))) {

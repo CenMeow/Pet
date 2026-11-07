@@ -33,7 +33,7 @@ function blankStep(type: StepType): Step {
     case 'tab':
       return { id, type, target: 'title', holdMs: 800 }
     case 'waitColor':
-      return { id, type, x: 960, y: 540, color: '#FFFFFF', tolerance: 20, timeoutMs: 1000, stopOnTimeout: true }
+      return { id, type, points: [{ x: 960, y: 540, color: '#FFFFFF' }], tolerance: 20, timeoutMs: 1000, stopOnTimeout: true }
   }
 }
 

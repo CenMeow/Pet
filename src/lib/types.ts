@@ -12,10 +12,17 @@ export type Step =
   | { id: string; type: 'moveTo'; x: number; y: number }
   /** 封鎖／解除封鎖你自己的鍵盤或滑鼠輸入，巨集本身送出的按鍵不受影響。巨集結束時一定會自動解除。 */
   | { id: string; type: 'block'; target: BlockTarget; on: boolean }
-  /** 等螢幕上某一點變成指定顏色（例如等表情選單真的打開）。color 是 #RRGGBB，tolerance 是每個顏色通道可差多少（0–255）。 */
-  | { id: string; type: 'waitColor'; x: number; y: number; color: string; tolerance: number; timeoutMs: number; stopOnTimeout: boolean }
+  /** 等螢幕上的點變成指定顏色（例如等表情選單真的打開）。可以設好幾個點，任一個對了就通過。tolerance 是每個顏色通道可差多少（0–255）。 */
+  | { id: string; type: 'waitColor'; points: ColorPoint[]; tolerance: number; timeoutMs: number; stopOnTimeout: boolean }
   /** Tab：按住 Roblox 視窗正上方的標題列（左鍵）或右上的最小化鈕（右鍵）一段時間。全螢幕時會先按 F11 退出。 */
   | { id: string; type: 'tab'; target: TabTarget; holdMs: number }
+
+/** 等顏色要看的一個點：螢幕座標和顏色（#RRGGBB） */
+export interface ColorPoint {
+  x: number
+  y: number
+  color: string
+}
 
 export type BlockTarget = 'keyboard' | 'mouse' | 'all'
 

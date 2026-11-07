@@ -185,7 +185,7 @@ describe('background checks', () => {
       macro({ steps: [{ id: 'a', type: 'tap', key: 's', holdMs: 60 }, { id: 'b', type: 'wait', ms: 30 }] }),
       macro({ id: 'm2', name: '長', hotkey: 'F4', steps: [
         { id: 'c', type: 'wait', ms: 500 },
-        { id: 'd', type: 'waitColor', x: 1, y: 2, color: '#FFFFFF', tolerance: 10, timeoutMs: 1000, stopOnTimeout: true },
+        { id: 'd', type: 'waitColor', points: [{ x: 1, y: 2, color: '#FFFFFF' }], tolerance: 10, timeoutMs: 1000, stopOnTimeout: true },
       ] }),
     ], defaultSettings)
     expect(problems.filter((p) => p.level === 'error')).toEqual([])
@@ -300,7 +300,7 @@ F1::ExitApp()`
 
 describe('wait color', () => {
   const wc = (stopOnTimeout: boolean) => ({
-    id: 'w', type: 'waitColor' as const, x: 957, y: 700, color: '#F2C14E', tolerance: 20, timeoutMs: 1000, stopOnTimeout,
+    id: 'w', type: 'waitColor' as const, points: [{ x: 957, y: 700, color: '#F2C14E' }], tolerance: 20, timeoutMs: 1000, stopOnTimeout,
   })
 
   it('stops the macro and releases held keys when the color never shows up', () => {
@@ -321,18 +321,53 @@ describe('wait color', () => {
   })
 
   it('validates color and tolerance', () => {
-    const problems = validate([macro({ steps: [{ ...wc(true), color: 'red', tolerance: 300 }] })], defaultSettings)
+    const problems = validate([macro({ steps: [{ ...wc(true), points: [{ x: 957, y: 700, color: 'red' }], tolerance: 300 }] })], defaultSettings)
     expect(problems.filter((p) => p.level === 'error')).toHaveLength(2)
   })
 
   it('survives saving and .ahk import', async () => {
     const lib = parseLibraryJson(serializeLibrary(defaultSettings, [macro({ steps: [wc(true)] })]))
-    expect(lib.macros[0].steps[0]).toMatchObject({ type: 'waitColor', x: 957, y: 700, color: '#F2C14E', tolerance: 20, timeoutMs: 1000, stopOnTimeout: true })
+    expect(lib.macros[0].steps[0]).toMatchObject({ type: 'waitColor', points: [{ x: 957, y: 700, color: '#F2C14E' }], tolerance: 20, timeoutMs: 1000, stopOnTimeout: true })
     const { parseAhk } = await import('./ahkImport')
     const steps = [{ id: 'd', type: 'down' as const, key: 's' }, wc(true), wc(false), { id: 'u', type: 'up' as const, key: 's' }]
     const back = parseAhk(generate([macro({ steps })], defaultSettings).script, defaultSettings)
     expect(back.warnings).toEqual([])
     expect(back.macros[0].steps.map(({ id: _id, ...rest }) => rest)).toEqual(steps.map(({ id: _id, ...rest }) => rest))
+  })
+  const many = (stopOnTimeout: boolean) => ({
+    ...wc(stopOnTimeout),
+    points: [{ x: 957, y: 700, color: '#F2C14E' }, { x: 960, y: 540, color: '#00FF7F' }, { x: -5, y: 12, color: '#000000' }],
+  })
+
+  it('passes when any of several colors shows up', () => {
+    const steps = [{ id: 'd', type: 'down' as const, key: 's' }, many(true), many(false), { id: 'u', type: 'up' as const, key: 's' }]
+    const { script, problems } = generate([macro({ steps })], defaultSettings)
+    expect(problems.filter((p) => p.level === 'error')).toEqual([])
+    const call = 'WaitAnyColor([[957, 700, 0xF2C14E], [960, 540, 0x00FF7F], [-5, 12, 0x000000]], 20, 1000)'
+    expect(script).toContain(`    if !${call} {\r\n        Send("{s up}")\r\n        return\r\n    }\r\n    ${call}\r\n`)
+    expect(script).toContain('WaitAnyColor(points, variation, timeoutMs) {\n    start := A_TickCount\n    Loop {\n        for p in points {')
+    expect(script).toContain('WaitColor(x, y, color, variation, timeoutMs) {\n    return WaitAnyColor([[x, y, color]], variation, timeoutMs)\n}')
+    const back = parseAhk(script, defaultSettings)
+    expect(back.warnings).toEqual([])
+    expect(back.macros[0].steps.map(({ id: _id, ...rest }) => rest)).toEqual(steps.map(({ id: _id, ...rest }) => rest))
+    const saved = parseLibraryJson(serializeLibrary(defaultSettings, [macro({ steps })]))
+    expect(saved.macros[0].steps[1]).toMatchObject({ points: many(true).points })
+  })
+
+  it('says which color is wrong and needs at least one', () => {
+    const bad = { ...many(true), points: [{ x: 1, y: 2, color: '#FFFFFF' }, { x: 1.5, y: 2, color: 'nope' }] }
+    const msgs = validate([macro({ steps: [bad] })], defaultSettings).filter((p) => p.level === 'error').map((p) => p.message)
+    expect(msgs).toEqual(['「test」第 2 個顏色的取色座標要是整數', '「test」第 2 個顏色的顏色不正確'])
+    expect(validate([macro({ steps: [{ ...wc(true), points: [] }] })], defaultSettings).some((p) => p.message.includes('至少要有一個顏色'))).toBe(true)
+  })
+
+  it('opens libraries saved before colors could be added', () => {
+    const old = JSON.stringify({ version: 1, settings: defaultSettings, macros: [{ name: '舊', hotkey: 'c', steps: [
+      { type: 'waitColor', x: 957, y: 701, color: '#f2c14e', tolerance: 30, timeoutMs: 200, stopOnTimeout: false },
+    ] }] })
+    expect(parseLibraryJson(old).macros[0].steps[0]).toMatchObject({
+      type: 'waitColor', points: [{ x: 957, y: 701, color: '#F2C14E' }], tolerance: 30, timeoutMs: 200, stopOnTimeout: false,
+    })
   })
 })
 

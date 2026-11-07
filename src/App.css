@@ -348,6 +348,11 @@ body:has(.step-row.dragging) { cursor: grabbing; user-select: none; }
 .step-body { flex: 1; display: flex; align-items: center; gap: .45rem; flex-wrap: wrap; }
 .step-body input[type="number"] { padding: 0 .45rem; }
 .step-body .key-capture { min-width: 5rem; }
+/* 等顏色：每個顏色一行，最後一行是共用設定 */
+.type-waitColor .step-body { flex-direction: column; align-items: stretch; gap: .35rem; }
+.step-body .line { display: flex; align-items: center; gap: .45rem; flex-wrap: wrap; }
+.point-remove { width: 1.85rem; height: 1.85rem; color: var(--muted); }
+.point-remove:hover { color: var(--danger); }
 .step-actions { display: flex; gap: 1px; opacity: .55; transition: opacity .12s; }
 .step-row:hover .step-actions, .step-actions:focus-within { opacity: 1; }
 .step-actions button { width: 1.85rem; height: 1.85rem; }
