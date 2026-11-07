@@ -32,12 +32,14 @@ function blankStep(type: StepType): Step {
       return { id, type, target: 'all', on: true }
     case 'tab':
       return { id, type, target: 'title', holdMs: 800 }
+    case 'waitKey':
+      return { id, type, key: 'q', release: false, timeoutMs: 1000, stopOnTimeout: true }
     case 'waitColor':
       return { id, type, points: [{ x: 960, y: 540, color: '#FFFFFF' }], tolerance: 20, timeoutMs: 1000, stopOnTimeout: true }
   }
 }
 
-const ADDABLE: StepType[] = ['tap', 'down', 'up', 'wait', 'waitColor', 'turn', 'moveTo', 'tab', 'block']
+const ADDABLE: StepType[] = ['tap', 'down', 'up', 'wait', 'waitColor', 'waitKey', 'turn', 'moveTo', 'tab', 'block']
 
 export function MacroEditor({ macro, settings, problems, onChange, onDuplicate, onDelete }: Props) {
   // 用 pointer 事件自己做拖曳，不靠 HTML5 drag & drop（桌面版的 WebView2 會攔截它）
@@ -99,6 +101,12 @@ export function MacroEditor({ macro, settings, problems, onChange, onDuplicate, 
             label="按鍵穿透"
             title="觸發鍵本身也會照常送進遊戲"
             onChange={(passThrough) => onChange({ ...macro, passThrough })}
+          />
+          <Switch
+            checked={macro.repeat === true}
+            label="按住重複"
+            title="按住觸發鍵會一直重複，放開就停"
+            onChange={(repeat) => onChange({ ...macro, repeat })}
           />
           <span className="spacer" />
           <button type="button" className="ghost" onClick={onDuplicate}><Icon name="copy" />複製</button>

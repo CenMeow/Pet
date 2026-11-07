@@ -14,6 +14,8 @@ export type Step =
   | { id: string; type: 'block'; target: BlockTarget; on: boolean }
   /** 等螢幕上的點變成指定顏色（例如等表情選單真的打開）。可以設好幾個點，任一個對了就通過。tolerance 是每個顏色通道可差多少（0–255）。 */
   | { id: string; type: 'waitColor'; points: ColorPoint[]; tolerance: number; timeoutMs: number; stopOnTimeout: boolean }
+  /** 等你按下（release = false）或放開（release = true）某個鍵才繼續，例如放開觸發鍵才出招。 */
+  | { id: string; type: 'waitKey'; key: string; release: boolean; timeoutMs: number; stopOnTimeout: boolean }
   /** Tab：按住 Roblox 視窗正上方的標題列（左鍵）或右上的最小化鈕（右鍵）一段時間。全螢幕時會先按 F11 退出。 */
   | { id: string; type: 'tab'; target: TabTarget; holdMs: number }
 
@@ -38,6 +40,8 @@ export interface Macro {
   enabled: boolean
   /** 觸發後原本的按鍵是否照樣送給遊戲（AHK 的 ~ 前綴） */
   passThrough: boolean
+  /** 按住觸發鍵會一直重複，放開就停 */
+  repeat?: boolean
   note?: string
   steps: Step[]
 }

@@ -9,7 +9,9 @@ export interface AhkImport {
 }
 
 const SKIP_CALLS = /^(ExitApp|ToggleMacros|Reload|Suspend|Pause)\b/i
-const IGNORABLE = /^(\{|\}|return\b|global\b|static\b|local\b|if\s*\(?\s*!?\s*\w+\.Value|#|try\b|finally\b|else\b|PauseChecks\()/i
+const IGNORABLE = /^(\{|\}|return\b|break\b|global\b|static\b|local\b|if\s*\(?\s*!?\s*\w+\.Value|if\s*!\s*GetKeyState\(|#|try\b|finally\b|else\b|PauseChecks\(|Missed\()/i
+/** 編輯器「按住重複」產生的寫法：每輪結束檢查觸發鍵 */
+const REPEAT_CHECK = /^\s*if\s*!\s*GetKeyState\(/i
 
 function stripComment(line: string): string {
   // 去掉 ; 註解（引號內的不算）
@@ -88,6 +90,13 @@ function parseBody(lines: string[], settings: Settings, warn: (m: string) => voi
   for (let i = 0; i < lines.length; i++) {
     let l = stripComment(lines[i]).trim()
     if (!l) continue
+    // 沒有次數的 Loop { ... }：通常是「按住重複」，裡面的步驟只取一次
+    if (/^loop\s*\{?\s*$/i.test(l)) {
+      const blk = takeBlock(lines, l.endsWith('{') ? i : i + 1)
+      steps.push(...parseBody(blk.body.slice(1, -1), settings, warn, funcs, depth))
+      i = blk.end
+      continue
+    }
     // Loop N { ... } 或 Loop N 下一行
     const loop = /^loop\s*,?\s*\(?\s*(\d+)\s*\)?\s*(\{)?\s*$/i.exec(l)
     if (loop) {
@@ -125,6 +134,16 @@ function parseBody(lines: string[], settings: Settings, warn: (m: string) => voi
       if (points.length === 0) warn(`看不懂等顏色的點：${l}`)
       else steps.push({ id: newId(), type: 'waitColor', points, tolerance: Number(m[3]), timeoutMs: Number(m[4]), stopOnTimeout: Boolean(m[1]) })
       if (m[5]) i = takeBlock(lines, i).end
+    } else if ((m = /^(if\s*\(?\s*!\s*)?KeyWait\s*\(?\s*["']([^"']+)["']\s*(?:,\s*["']([^"']*)["'])?\s*\)?\s*\)?\s*(\{)?$/i.exec(l))
+      || (m = /^()KeyWait\s*,\s*([^,\s]+)\s*(?:,\s*(.*?))?()$/i.exec(l))) {
+      const key = keyName(m[2].replace(/^``$/, '`'))
+      const opts = m[3] ?? ''
+      // 選項：D = 等按下（沒有就是等放開）、T秒數 = 最多等多久，可以連在一起寫（"DT1"）
+      const t = /T\s*([\d.]+)/i.exec(opts)
+      const down = /D/i.test(opts.replace(/T\s*[\d.]+/gi, ''))
+      if (!key) warn(`等按鍵看不懂的按鍵：${m[2]}`)
+      else steps.push({ id: newId(), type: 'waitKey', key, release: !down, timeoutMs: t ? Math.round(Number(t[1]) * 1000) : 10000, stopOnTimeout: Boolean(m[1]) })
+      if (m[4]) i = takeBlock(lines, i).end
     } else if ((m = /^TabWindow\(\s*["'](title|minimize)["']\s*,\s*([\d.]+)\s*\)$/i.exec(l))) {
       steps.push({ id: newId(), type: 'tab', target: m[1].toLowerCase() === 'minimize' ? 'minimize' : 'title', holdMs: Number(m[2]) })
     } else if ((m = /^Send(?:Input|Event|Play)?\s*\(?\s*(["'])(.*)\1\s*\)?$/i.exec(l))) {
@@ -216,6 +235,7 @@ export function parseAhk(text: string, settings: Settings, fileName = ''): AhkIm
     }
     const local: string[] = []
     const steps = parseBody(body, settings, (m) => local.push(m), funcs)
+    const repeat = body.some((l) => REPEAT_CHECK.test(stripComment(l)))
     if (steps.length === 0) continue
     const label = name || `熱鍵 ${hk[2]}`
     if (!hotkey) warnings.push(`「${label}」的熱鍵 ${hk[2]} 無法辨識，請手動設定`)
@@ -226,6 +246,7 @@ export function parseAhk(text: string, settings: Settings, fileName = ''): AhkIm
       hotkey: hotkey ?? '',
       enabled: true,
       passThrough: hk[1].includes('~'),
+      ...(repeat ? { repeat: true } : {}),
       note: fileName ? `從 ${fileName} 匯入` : undefined,
       steps,
     })

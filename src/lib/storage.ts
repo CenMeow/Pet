@@ -45,6 +45,15 @@ function parseStep(raw: unknown): Step | null {
       return { id, type: 'moveTo', x: Math.round(num(r.x, 0)), y: Math.round(num(r.y, 0)) }
     case 'tab':
       return { id, type: 'tab', target: r.target === 'minimize' ? 'minimize' : 'title', holdMs: Math.max(0, num(r.holdMs, 800)) }
+    case 'waitKey':
+      return {
+        id,
+        type: 'waitKey',
+        key: str(r.key, 'q'),
+        release: r.release === true,
+        timeoutMs: Math.max(1, num(r.timeoutMs, 1000)),
+        stopOnTimeout: r.stopOnTimeout !== false,
+      }
     case 'waitColor': {
       // 0.2.13 以前只有一個點，直接存在步驟上（x、y、color）
       const points = Array.isArray(r.points) && r.points.length > 0 ? r.points.map(parsePoint) : [parsePoint(r)]
@@ -72,6 +81,7 @@ function parseMacro(raw: unknown): Macro | null {
     hotkey: str(r.hotkey),
     enabled: r.enabled !== false,
     passThrough: r.passThrough === true,
+    ...(r.repeat === true ? { repeat: true } : {}),
     note: str(r.note) || undefined,
     steps,
   }

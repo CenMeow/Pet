@@ -35,7 +35,7 @@ export function estimateDuration(steps: Step[]): number {
 
 /** 巨集跑的時候暫停背景檢查多久：最多 1.2 秒，heartbeat 才不會太久沒更新讓編輯器以為腳本停了 */
 function pauseMs(steps: Step[]): number {
-  const waits = steps.reduce((t, s) => t + (s.type === 'waitColor' ? Math.max(0, s.timeoutMs) : 0), 0)
+  const waits = steps.reduce((t, s) => t + (s.type === 'waitColor' || s.type === 'waitKey' ? Math.max(0, s.timeoutMs) : 0), 0)
   return Math.min(1200, Math.round(estimateDuration(steps) + waits + 300))
 }
 
@@ -50,6 +50,13 @@ function hotkeyDef(raw: string): string {
   const hk = normalizeHotkey(raw) as string
   return hk.replace(/[;`]$/, (c) => '`' + c)
 }
+
+function indent(lines: string[]): string[] {
+  return lines.map((l) => `    ${l}`)
+}
+
+/** 按住重複時一輪最短多久，避免一秒送出上千次按鍵 */
+export const MIN_REPEAT_MS = 10
 
 function cleanComment(text: string): string {
   return text.replace(/[\r\n]+/g, ' ').trim()
@@ -99,6 +106,8 @@ export function validate(macros: Macro[], settings: Settings): Problem[] {
     }
     if (m.steps.length === 0) {
       problems.push({ level: 'warning', macroId: m.id, message: `「${name}」還沒有任何步驟` })
+    } else if (m.repeat && estimateDuration(m.steps) < MIN_REPEAT_MS) {
+      problems.push({ level: 'error', macroId: m.id, message: `「${name}」按住重複時，一輪至少要 ${MIN_REPEAT_MS} 毫秒，加一個等待` })
     }
     for (const s of m.steps) {
       const at = { macroId: m.id, stepId: s.id }
@@ -129,6 +138,13 @@ export function validate(macros: Macro[], settings: Settings): Problem[] {
           if (s.target !== 'title' && s.target !== 'minimize') problems.push({ level: 'error', ...at, message: `「${name}」的 Tab 位置不正確` })
           if (!isFiniteNumber(s.holdMs) || s.holdMs < 0) problems.push({ level: 'error', ...at, message: `「${name}」的 Tab 按住時間必須是 0 以上的數字` })
           break
+        case 'waitKey': {
+          const k = normalizeKey(s.key)
+          if (!k) problems.push({ level: 'error', ...at, message: `「${name}」有無法辨識的按鍵「${s.key}」` })
+          else if (/^Wheel/.test(k)) problems.push({ level: 'error', ...at, message: `「${name}」等按鍵不能用滾輪` })
+          if (!isFiniteNumber(s.timeoutMs) || s.timeoutMs <= 0) problems.push({ level: 'error', ...at, message: `「${name}」的最多等待時間必須大於 0` })
+          break
+        }
         case 'waitColor':
           if (s.points.length === 0) problems.push({ level: 'error', ...at, message: `「${name}」的等顏色至少要有一個顏色` })
           s.points.forEach((p, k) => {
@@ -154,8 +170,13 @@ export function validate(macros: Macro[], settings: Settings): Problem[] {
   return problems
 }
 
-/** held：執行到這一步時，巨集自己按住還沒放開的鍵（逾時停止前要先放開） */
-function stepLines(s: Step, settings: Settings, held: string[]): string[] {
+/** 等不到而停止：先放開巨集按住的鍵，在畫面左上角提示是第幾步，然後結束巨集 */
+function stopLines(cond: string, held: string[], no: number, what: string): string[] {
+  return [`if !${cond} {`, ...held.map((k) => `    Send("{${sendKey(k)} up}")`), `    Missed(${no}, "${what}")`, '    return', '}']
+}
+
+/** held：執行到這一步時，巨集自己按住還沒放開的鍵（逾時停止前要先放開）；no：第幾步 */
+function stepLines(s: Step, settings: Settings, held: string[], no: number): string[] {
   switch (s.type) {
     case 'tap':
       if (s.holdMs && s.holdMs > 0) {
@@ -182,9 +203,11 @@ function stepLines(s: Step, settings: Settings, held: string[]): string[] {
       const call = s.points.length === 1
         ? `WaitColor(${p.x}, ${p.y}, ${hex(p.color)}, ${s.tolerance}, ${Math.round(s.timeoutMs)})`
         : `WaitAnyColor([${s.points.map((q) => `[${q.x}, ${q.y}, ${hex(q.color)}]`).join(', ')}], ${s.tolerance}, ${Math.round(s.timeoutMs)})`
-      if (!s.stopOnTimeout) return [call]
-      if (held.length === 0) return [`if !${call}`, '    return']
-      return [`if !${call} {`, ...held.map((k) => `    Send("{${sendKey(k)} up}")`), '    return', '}']
+      return s.stopOnTimeout ? stopLines(call, held, no, '沒等到顏色') : [call]
+    }
+    case 'waitKey': {
+      const call = `KeyWait("${sendKey(s.key)}", "${s.release ? '' : 'D '}T${Math.round(s.timeoutMs) / 1000}")`
+      return s.stopOnTimeout ? stopLines(call, held, no, s.release ? '沒等到放開按鍵' : '沒等到按鍵') : [call]
     }
     case 'block': {
       const v = s.on ? 'true' : 'false'
@@ -460,6 +483,12 @@ WaitAnyColor(points, variation, timeoutMs) {
     }
 }
 
+; 等不到而停止時，在畫面左上角提示是第幾步
+Missed(step, what) {
+    ToolTip("第 " step " 步" what "，巨集停止", 10, 10, 20)
+    SetTimer(() => ToolTip(, , , 20), -1500)
+}
+
 ToggleMacros(*) {
     global MacrosEnabled
     MacrosEnabled := !MacrosEnabled
@@ -475,6 +504,7 @@ export function generate(macros: Macro[], settings: Settings): GenerateResult {
 
   const enabled = macros.filter((m) => m.enabled)
   const needsAdmin = enabled.some((m) => m.steps.some((s) => s.type === 'block'))
+  const needsHook = needsAdmin || enabled.some((m) => m.repeat || m.steps.some((s) => s.type === 'waitKey'))
   const out: string[] = []
   out.push(
     '; 由 TSB 巨屌編輯器產生，請在編輯器裡修改，直接改這個檔案會被覆蓋',
@@ -483,8 +513,11 @@ export function generate(macros: Macro[], settings: Settings): GenerateResult {
     'SendMode("Input")',
     'CoordMode("Mouse", "Screen")',
     'CoordMode("Pixel", "Screen")',
+    'CoordMode("ToolTip", "Screen")',
     'A_MaxHotkeysPerInterval := 2000',
     'DllCall("winmm\\timeBeginPeriod", "UInt", 1)',
+    '; 優先順序調高一點，電腦忙的時候等待時間比較不會被拖長',
+    'ProcessSetPriority("AboveNormal")',
     '',
     'global MacrosEnabled := true',
     'global FullBlocked := false',
@@ -511,7 +544,7 @@ export function generate(macros: Macro[], settings: Settings): GenerateResult {
     'global CurSens := FallbackSens',
     'global SensFromRoblox := false',
     ...(settings.autoSensitivity ? ['RefreshSens()', 'SetTimer(RefreshSens, 3000)'] : []),
-    ...(needsAdmin ? ['; 讀取實體按鍵狀態需要鍵盤、滑鼠 hook', 'InstallKeybdHook()', 'InstallMouseHook()'] : []),
+    ...(needsHook ? ['; 讀取實體按鍵狀態需要鍵盤、滑鼠 hook', 'InstallKeybdHook()', 'InstallMouseHook()'] : []),
     'ToolTip((A_IsAdmin ? "TSB 巨集已載入（系統管理員）" : "TSB 巨集已載入") "`n轉視角靈敏度：" Format("{:g}", CurSens) (SensFromRoblox ? "（Roblox 設定）" : "（編輯器設定）"))',
     'SetTimer(() => ToolTip(), -2500)',
     '',
@@ -533,22 +566,33 @@ export function generate(macros: Macro[], settings: Settings): GenerateResult {
   enabled.forEach((m, i) => {
     out.push(`; ${cleanComment(m.name)}`)
     if (m.note) out.push(`; ${cleanComment(m.note)}`)
-    out.push(`Macro${i + 1}(*) {`, `    PauseChecks(${pauseMs(m.steps)})`)
-    const blocks = m.steps.some((s) => s.type === 'block')
-    const indent = blocks ? '        ' : '    '
-    if (blocks) out.push('    try {')
+    out.push(`Macro${i + 1}(*) {`)
+    if (!m.repeat) out.push(`    PauseChecks(${pauseMs(m.steps)})`)
+    let body: string[] = []
     const held: string[] = []
-    for (const s of m.steps) {
-      for (const line of stepLines(s, settings, held)) out.push(`${indent}${line}`)
+    m.steps.forEach((s, j) => {
+      body.push(...stepLines(s, settings, held, j + 1))
       if (s.type === 'down' || s.type === 'up') {
         const k = normalizeKey(s.key) ?? s.key
         const at = held.indexOf(k)
         if (s.type === 'down' && at < 0) held.push(k)
         if (s.type === 'up' && at >= 0) held.splice(at, 1)
       }
+    })
+    if (m.repeat) {
+      // 按住重複：每一輪跑完檢查觸發鍵還有沒有按著
+      const key = (normalizeHotkey(m.hotkey) as string).replace(/^[\^!+#]+/, '')
+      body = [
+        'Loop {',
+        `    PauseChecks(${pauseMs(m.steps)})`,
+        ...indent(body),
+        `    if !GetKeyState("${key === '`' ? '``' : key}", "P") || !MacrosEnabled`,
+        '        break',
+        '}',
+      ]
     }
-    if (blocks) out.push('    } finally {', '        UnblockAll()', '    }')
-    out.push('}', '')
+    if (m.steps.some((s) => s.type === 'block')) body = ['try {', ...indent(body), '} finally {', '    UnblockAll()', '}']
+    out.push(...indent(body), '}', '')
   })
 
   out.push(HELPERS, '')

@@ -39,6 +39,7 @@
   --c-moveTo: #f5a54a;
   --c-block: #ff6b8a;
   --c-waitColor: #e8c547;
+  --c-waitKey: #e47fd6;
   --c-tab: #3cc8d8;
   color-scheme: dark;
 }
@@ -66,6 +67,7 @@
   --c-moveTo: #c47518;
   --c-block: #d6365c;
   --c-waitColor: #a8860b;
+  --c-waitKey: #b0429f;
   --c-tab: #0e8796;
   color-scheme: light;
 }
@@ -297,6 +299,7 @@ button.update:hover:not(:disabled) { background: color-mix(in srgb, var(--accent
 .type-moveTo { --c: var(--c-moveTo); }
 .type-block { --c: var(--c-block); }
 .type-waitColor { --c: var(--c-waitColor); }
+.type-waitKey { --c: var(--c-waitKey); }
 .type-tab { --c: var(--c-tab); }
 
 /* 取色 */

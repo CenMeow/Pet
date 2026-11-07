@@ -308,9 +308,11 @@ describe('wait color', () => {
     const { script, problems } = generate([macro({ steps })], defaultSettings)
     expect(problems.filter((p) => p.level === 'error')).toEqual([])
     expect(script).toContain('CoordMode("Pixel", "Screen")')
-    expect(script).toContain('    if !WaitColor(957, 700, 0xF2C14E, 20, 1000) {\r\n        Send("{s up}")\r\n        return\r\n    }\r\n    Send("{s up}")')
+    expect(script).toContain('    if !WaitColor(957, 700, 0xF2C14E, 20, 1000) {\r\n        Send("{s up}")\r\n        Missed(2, "沒等到顏色")\r\n        return\r\n    }\r\n    Send("{s up}")')
     // s 放開之後就不用再補放開
-    expect(script).toContain('    Send("{s up}")\r\n    if !WaitColor(957, 700, 0xF2C14E, 20, 1000)\r\n        return\r\n')
+    expect(script).toContain('    Send("{s up}")\r\n    if !WaitColor(957, 700, 0xF2C14E, 20, 1000) {\r\n        Missed(4, "沒等到顏色")\r\n        return\r\n    }\r\n')
+    expect(script).toContain('Missed(step, what) {\n    ToolTip("第 " step " 步" what "，巨集停止", 10, 10, 20)')
+    expect(script).toContain('CoordMode("ToolTip", "Screen")')
     expect(script).toContain('WaitColor(x, y, color, variation, timeoutMs) {')
   })
 
@@ -344,7 +346,7 @@ describe('wait color', () => {
     const { script, problems } = generate([macro({ steps })], defaultSettings)
     expect(problems.filter((p) => p.level === 'error')).toEqual([])
     const call = 'WaitAnyColor([[957, 700, 0xF2C14E], [960, 540, 0x00FF7F], [-5, 12, 0x000000]], 20, 1000)'
-    expect(script).toContain(`    if !${call} {\r\n        Send("{s up}")\r\n        return\r\n    }\r\n    ${call}\r\n`)
+    expect(script).toContain(`    if !${call} {\r\n        Send("{s up}")\r\n        Missed(2, "沒等到顏色")\r\n        return\r\n    }\r\n    ${call}\r\n`)
     expect(script).toContain('WaitAnyColor(points, variation, timeoutMs) {\n    start := A_TickCount\n    Loop {\n        for p in points {')
     expect(script).toContain('WaitColor(x, y, color, variation, timeoutMs) {\n    return WaitAnyColor([[x, y, color]], variation, timeoutMs)\n}')
     const back = parseAhk(script, defaultSettings)
@@ -470,5 +472,88 @@ describe('undo / redo', () => {
     for (let i = 1; i <= LIMIT + 20; i++) h = record(h, i, i * 10_000)
     expect(h.past).toHaveLength(LIMIT)
     expect(h.past[0]).toBe(20)
+  })
+})
+
+describe('wait key', () => {
+  const wk = (key: string, release: boolean, timeoutMs: number, stopOnTimeout: boolean) =>
+    ({ id: `k${key}${release}`, type: 'waitKey' as const, key, release, timeoutMs, stopOnTimeout })
+
+  it('waits for a press or a release', () => {
+    const steps = [
+      { id: 'd', type: 'down' as const, key: 's' },
+      wk('LButton', false, 1500, true),
+      { id: 'u', type: 'up' as const, key: 's' },
+      wk('c', true, 250, false),
+      wk('Space', false, 1000, true),
+    ]
+    const { script, problems } = generate([macro({ steps })], defaultSettings)
+    expect(problems.filter((p) => p.level === 'error')).toEqual([])
+    expect(script).toContain('    if !KeyWait("LButton", "D T1.5") {\r\n        Send("{s up}")\r\n        Missed(2, "沒等到按鍵")\r\n        return\r\n    }\r\n')
+    expect(script).toContain('    KeyWait("c", "T0.25")\r\n')
+    expect(script).toContain('    if !KeyWait("Space", "D T1") {\r\n        Missed(5, "沒等到按鍵")\r\n')
+    expect(script).toContain('InstallKeybdHook()')
+    const back = parseAhk(script, defaultSettings)
+    expect(back.warnings).toEqual([])
+    expect(back.macros[0].steps.map(({ id: _id, ...rest }) => rest)).toEqual(steps.map(({ id: _id, ...rest }) => rest))
+    const saved = parseLibraryJson(serializeLibrary(defaultSettings, [macro({ steps })]))
+    expect(saved.macros[0].steps.map(({ id: _id, ...rest }) => rest)).toEqual(steps.map(({ id: _id, ...rest }) => rest))
+  })
+
+  it('reads other ways of writing KeyWait', () => {
+    const text = 'x:: {\n    KeyWait("q", "DT2")\n    KeyWait "LButton"\n}\nc::\nKeyWait, Space, D\nreturn\n'
+    const { macros, warnings } = parseAhk(text, defaultSettings)
+    expect(warnings).toEqual([])
+    expect(macros.flatMap((m) => m.steps).map(({ id: _id, ...rest }) => rest)).toEqual([
+      { type: 'waitKey', key: 'q', release: false, timeoutMs: 2000, stopOnTimeout: false },
+      { type: 'waitKey', key: 'LButton', release: true, timeoutMs: 10000, stopOnTimeout: false },
+      { type: 'waitKey', key: 'Space', release: false, timeoutMs: 10000, stopOnTimeout: false },
+    ])
+  })
+
+  it('rejects the wheel and empty timeouts', () => {
+    const errors = validate([macro({ steps: [wk('WheelUp', false, 1000, true), wk('q', false, 0, true)] })], defaultSettings)
+      .filter((p) => p.level === 'error').map((p) => p.message)
+    expect(errors).toEqual(['「test」等按鍵不能用滾輪', '「test」的最多等待時間必須大於 0'])
+  })
+})
+
+describe('hold to repeat', () => {
+  const steps = [{ id: 'a', type: 'tap' as const, key: 'LButton' }, { id: 'b', type: 'wait' as const, ms: 50 }]
+
+  it('repeats while the hotkey is held', () => {
+    const { script, problems } = generate([macro({ hotkey: '^XButton1', repeat: true, steps })], defaultSettings)
+    expect(problems.filter((p) => p.level === 'error')).toEqual([])
+    expect(script).toContain([
+      'Macro1(*) {',
+      '    Loop {',
+      '        PauseChecks(350)',
+      '        Send("{LButton}")',
+      '        PreciseSleep(50)',
+      '        if !GetKeyState("XButton1", "P") || !MacrosEnabled',
+      '            break',
+      '    }',
+      '}',
+    ].join('\r\n'))
+    expect(script).toContain('InstallMouseHook()')
+    expect(script).toContain('ProcessSetPriority("AboveNormal")')
+    const back = parseAhk(script, defaultSettings)
+    expect(back.warnings).toEqual([])
+    expect(back.macros[0]).toMatchObject({ hotkey: '^XButton1', repeat: true })
+    expect(back.macros[0].steps.map((s) => s.type)).toEqual(['tap', 'wait'])
+    expect(parseLibraryJson(serializeLibrary(defaultSettings, [macro({ repeat: true, steps })])).macros[0].repeat).toBe(true)
+  })
+
+  it('keeps unblocking last when it also blocks input', () => {
+    const blocked = [{ id: 'x', type: 'block' as const, target: 'all' as const, on: true }, ...steps]
+    const { script } = generate([macro({ repeat: true, steps: blocked })], defaultSettings)
+    expect(script).toContain('Macro1(*) {\r\n    try {\r\n        Loop {\r\n            PauseChecks(350)\r\n            BlockAll(true)\r\n')
+    expect(script).toContain('            if !GetKeyState("c", "P") || !MacrosEnabled\r\n                break\r\n        }\r\n    } finally {\r\n        UnblockAll()\r\n    }\r\n}')
+  })
+
+  it('needs at least a short wait each round', () => {
+    const problems = validate([macro({ repeat: true, steps: [steps[0]] })], defaultSettings)
+    expect(problems.filter((p) => p.level === 'error').map((p) => p.message)).toEqual(['「test」按住重複時，一輪至少要 10 毫秒，加一個等待'])
+    expect(validate([macro({ steps: [steps[0]] })], defaultSettings).filter((p) => p.level === 'error')).toEqual([])
   })
 })

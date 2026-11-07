@@ -13,6 +13,7 @@ export const STEP_LABELS: Record<Step['type'], string> = {
   moveTo: '滑鼠移到',
   block: '封鎖輸入',
   waitColor: '等顏色',
+  waitKey: '等按鍵',
   tab: 'Tab',
 }
 
@@ -228,6 +229,24 @@ export function StepRow({ step, index, total, hasError, onChange, onMove, onDupl
       )
       break
     }
+    case 'waitKey':
+      body = (
+        <>
+          <KeyCapture value={step.key} onChange={(key) => onChange({ ...step, key })} />
+          <select value={step.release ? 'up' : 'down'} onChange={(e) => onChange({ ...step, release: e.target.value === 'up' })}>
+            <option value="down">按下</option>
+            <option value="up">放開</option>
+          </select>
+          <span className="unit">最多等</span>
+          <NumberField value={step.timeoutMs} min={1} width={65} onChange={(timeoutMs) => onChange({ ...step, timeoutMs })} />
+          <span className="unit">毫秒</span>
+          <select value={step.stopOnTimeout ? 'stop' : 'go'} onChange={(e) => onChange({ ...step, stopOnTimeout: e.target.value === 'stop' })}>
+            <option value="stop">沒等到就停止</option>
+            <option value="go">沒等到也繼續</option>
+          </select>
+        </>
+      )
+      break
     case 'moveTo':
       body = (
         <>
