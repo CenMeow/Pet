@@ -23,6 +23,8 @@ export function normalizeKey(raw: string): string | null {
     if (PUNCT.has(k)) return k
     return null
   }
+  // 用按鍵位置寫的 `（AHK 熱鍵沒辦法直接寫 `）
+  if (/^(sc029|vkc0)$/i.test(k)) return '`'
   return NAMED_LOWER.get(k.toLowerCase()) ?? null
 }
 

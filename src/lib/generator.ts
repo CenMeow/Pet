@@ -45,10 +45,10 @@ function sendKey(key: string): string {
   return k === '`' ? '``' : k
 }
 
-/** 熱鍵定義行的寫法（; 和 ` 需要跳脫） */
+/** 熱鍵定義行的寫法：; 要跳脫；` 在 AHK v2 熱鍵裡寫不進去，改用按鍵位置 SC029 */
 function hotkeyDef(raw: string): string {
   const hk = normalizeHotkey(raw) as string
-  return hk.replace(/[;`]$/, (c) => '`' + c)
+  return hk.replace(/`$/, 'SC029').replace(/;$/, '`;')
 }
 
 function indent(lines: string[]): string[] {
@@ -581,12 +581,12 @@ export function generate(macros: Macro[], settings: Settings): GenerateResult {
     })
     if (m.repeat) {
       // 按住重複：每一輪跑完檢查觸發鍵還有沒有按著
-      const key = (normalizeHotkey(m.hotkey) as string).replace(/^[\^!+#]+/, '')
+      const key = hotkeyDef(m.hotkey).replace(/^[\^!+#]+/, '').replace(/^`;$/, ';')
       body = [
         'Loop {',
         `    PauseChecks(${pauseMs(m.steps)})`,
         ...indent(body),
-        `    if !GetKeyState("${key === '`' ? '``' : key}", "P") || !MacrosEnabled`,
+        `    if !GetKeyState("${key}", "P") || !MacrosEnabled`,
         '        break',
         '}',
       ]

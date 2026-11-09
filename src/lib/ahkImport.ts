@@ -204,7 +204,8 @@ export function parseAhk(text: string, settings: Settings, fileName = ''): AhkIm
     const raw = lines[i]
     const hk = /^\s*([~$*]*)([^\s:;][^\s:]*)::(.*)$/.exec(raw)
     if (!hk) continue
-    const hotkey = normalizeHotkey(hk[2])
+    // `; 和 `` 是跳脫過的 ; 和 `
+    const hotkey = normalizeHotkey(hk[2].replace(/`([;`])/g, '$1'))
     const restRaw = hk[3]
     const comment = /;\s*(.+)$/.exec(restRaw)?.[1]?.trim()
     const rest = stripComment(restRaw).trim()

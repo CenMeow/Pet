@@ -557,3 +557,17 @@ describe('hold to repeat', () => {
     expect(validate([macro({ steps: [steps[0]] })], defaultSettings).filter((p) => p.level === 'error')).toEqual([])
   })
 })
+
+describe('backtick hotkey', () => {
+  it('writes ` by key position so AutoHotkey accepts it', () => {
+    const steps = [{ id: 'a', type: 'tap' as const, key: 'q' }, { id: 'b', type: 'wait' as const, ms: 20 }]
+    const { script } = generate([macro({ hotkey: '`', steps }), macro({ id: 'm2', hotkey: '^;', repeat: true, steps })], defaultSettings)
+    expect(script).toContain('$SC029::Macro1()')
+    expect(script).toContain('$^`;::Macro2()')
+    expect(script).toContain('if !GetKeyState(";", "P")')
+    const back = parseAhk(script, defaultSettings)
+    expect(back.warnings).toEqual([])
+    expect(back.macros.map((m) => m.hotkey)).toEqual(['`', '^;'])
+  })
+})
+
