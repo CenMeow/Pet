@@ -189,10 +189,12 @@ function stepLines(s: Step, settings: Settings, held: string[], no: number): str
       return [`Send("{${sendKey(s.key)} up}")`]
     case 'wait':
       return s.ms > 0 ? [`PreciseSleep(${Math.round(s.ms)})`] : []
-    case 'turn':
+    case 'turn': {
+      const v = s.vertical ? ', 1' : ''
       return settings.autoSensitivity
-        ? [`TurnDeg(${s.degrees}, ${s.parts}, ${Math.round(s.partDelayMs)})`]
-        : [`Turn(${turnCounts(s.degrees, settings)}, ${s.parts}, ${Math.round(s.partDelayMs)})  ; ${s.degrees}°`]
+        ? [`TurnDeg(${s.degrees}, ${s.parts}, ${Math.round(s.partDelayMs)}${v})`]
+        : [`Turn(${turnCounts(s.degrees, settings)}, ${s.parts}, ${Math.round(s.partDelayMs)}${v})  ; ${s.vertical ? '上下 ' : ''}${s.degrees}°`]
+    }
     case 'moveTo':
       return [`MouseMove(${s.x}, ${s.y}, 0)`]
     case 'tab':
@@ -239,11 +241,13 @@ PreciseSleep(ms) {
 }
 
 ; 轉視角：相對移動滑鼠，shift lock 下也有效。counts 正數向右
-Turn(counts, parts, delayMs) {
+; vertical = 1 時改成上下轉（正數向下）
+Turn(counts, parts, delayMs, vertical := 0) {
     done := 0
     Loop parts {
         target := Round(counts * A_Index / parts)
-        DllCall("mouse_event", "UInt", 1, "Int", target - done, "Int", 0, "UInt", 0, "UPtr", 0)
+        d := target - done
+        DllCall("mouse_event", "UInt", 1, "Int", vertical ? 0 : d, "Int", vertical ? d : 0, "UInt", 0, "UPtr", 0)
         done := target
         if (A_Index < parts && delayMs > 0)
             PreciseSleep(delayMs)
@@ -292,9 +296,9 @@ RefreshSens(*) {
     started := true
 }
 
-TurnDeg(degrees, parts, delayMs) {
+TurnDeg(degrees, parts, delayMs, vertical := 0) {
     global CountsPer360, CurSens
-    Turn(Round(degrees / 360 * CountsPer360 / CurSens), parts, delayMs)
+    Turn(Round(degrees / 360 * CountsPer360 / CurSens), parts, delayMs, vertical)
 }
 
 WatchEditor() {

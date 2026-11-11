@@ -6,8 +6,8 @@ export type Step =
   | { id: string; type: 'down'; key: string }
   | { id: string; type: 'up'; key: string }
   | { id: string; type: 'wait'; ms: number }
-  /** 轉視角：用相對滑鼠移動（mouse_event），shift lock 下也有效。正數 = 向右。 */
-  | { id: string; type: 'turn'; degrees: number; parts: number; partDelayMs: number }
+  /** 轉視角：用相對滑鼠移動（mouse_event），shift lock 下也有效。左右：正數 = 向右；vertical 上下：正數 = 向下。 */
+  | { id: string; type: 'turn'; degrees: number; parts: number; partDelayMs: number; vertical?: boolean }
   /** 移動滑鼠到螢幕絕對座標（例如點表情輪盤），會因解析度不同而失準。 */
   | { id: string; type: 'moveTo'; x: number; y: number }
   /** 封鎖／解除封鎖你自己的鍵盤或滑鼠輸入，巨集本身送出的按鍵不受影響。巨集結束時一定會自動解除。 */

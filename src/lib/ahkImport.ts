@@ -152,10 +152,12 @@ function parseBody(lines: string[], settings: Settings, warn: (m: string) => voi
       steps.push(...sendSteps(m[1], warn)) // v1：Send {b}
     } else if ((m = /^(?:Precise)?Sleep\s*[,(]?\s*([\d.]+)\s*\)?$/i.exec(l))) {
       steps.push({ id: newId(), type: 'wait', ms: Number(m[1]) })
-    } else if ((m = /^TurnDeg\(\s*(-?[\d.]+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)$/i.exec(l))) {
-      steps.push({ id: newId(), type: 'turn', degrees: Number(m[1]), parts: Number(m[2]), partDelayMs: Number(m[3]) })
-    } else if ((m = /^Turn\(\s*(-?[\d.]+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)$/i.exec(l))) {
-      steps.push({ id: newId(), type: 'turn', degrees: countsToDeg(Number(m[1])), parts: Number(m[2]), partDelayMs: Number(m[3]) })
+    } else if ((m = /^TurnDeg\(\s*(-?[\d.]+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*(?:,\s*([01])\s*)?\)$/i.exec(l))) {
+      const vertical = m[4] === '1' ? { vertical: true } : {}
+      steps.push({ id: newId(), type: 'turn', degrees: Number(m[1]), parts: Number(m[2]), partDelayMs: Number(m[3]), ...vertical })
+    } else if ((m = /^Turn\(\s*(-?[\d.]+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*(?:,\s*([01])\s*)?\)$/i.exec(l))) {
+      const vertical = m[4] === '1' ? { vertical: true } : {}
+      steps.push({ id: newId(), type: 'turn', degrees: countsToDeg(Number(m[1])), parts: Number(m[2]), partDelayMs: Number(m[3]), ...vertical })
     } else if ((m = /^DllCall\(\s*"mouse_event"\s*,\s*"UInt"\s*,\s*1\s*,\s*"Int"\s*,\s*([^,]+?)\s*,/i.exec(l))) {
       const c = num(m[1])
       if (c === null) warn(`轉視角用了變數（${m[1]}），請手動設定角度`)

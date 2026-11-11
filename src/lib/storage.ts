@@ -36,7 +36,10 @@ function parseStep(raw: unknown): Step | null {
     case 'wait':
       return { id, type: 'wait', ms: num(r.ms, 0) }
     case 'turn':
-      return { id, type: 'turn', degrees: num(r.degrees, 0), parts: Math.max(1, Math.round(num(r.parts, 1))), partDelayMs: num(r.partDelayMs, 0) }
+      return {
+        id, type: 'turn', degrees: num(r.degrees, 0), parts: Math.max(1, Math.round(num(r.parts, 1))), partDelayMs: num(r.partDelayMs, 0),
+        ...(r.vertical === true ? { vertical: true } : {}),
+      }
     case 'block': {
       const target = r.target === 'keyboard' || r.target === 'mouse' ? r.target : 'all'
       return { id, type: 'block', target, on: r.on !== false }

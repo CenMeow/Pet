@@ -571,3 +571,23 @@ describe('backtick hotkey', () => {
   })
 })
 
+describe('turn up and down', () => {
+  const steps = [
+    { id: 'a', type: 'turn' as const, degrees: -45, parts: 3, partDelayMs: 5, vertical: true },
+    { id: 'b', type: 'turn' as const, degrees: 30, parts: 1, partDelayMs: 0 },
+  ]
+  it('moves the mouse vertically and survives import and saving', () => {
+    for (const autoSensitivity of [true, false]) {
+      const settings = { ...defaultSettings, autoSensitivity }
+      const { script } = generate([macro({ steps })], settings)
+      expect(script).toContain(autoSensitivity ? '    TurnDeg(-45, 3, 5, 1)\r\n    TurnDeg(30, 1, 0)\r\n' : `    Turn(${turnCounts(-45, settings)}, 3, 5, 1)  ; 上下 -45°`)
+      expect(script).toContain('DllCall("mouse_event", "UInt", 1, "Int", vertical ? 0 : d, "Int", vertical ? d : 0, "UInt", 0, "UPtr", 0)')
+      const back = parseAhk(script, settings).macros[0].steps.map(({ id: _id, ...rest }) => rest)
+      expect(back[0]).toMatchObject({ type: 'turn', parts: 3, partDelayMs: 5, vertical: true })
+      expect(back[1]).not.toHaveProperty('vertical')
+    }
+    const saved = parseLibraryJson(serializeLibrary(defaultSettings, [macro({ steps })])).macros[0].steps
+    expect(saved.map(({ id: _id, ...rest }) => rest)).toEqual(steps.map(({ id: _id, ...rest }) => rest))
+  })
+})
+
